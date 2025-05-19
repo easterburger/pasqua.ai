@@ -6,36 +6,81 @@ import type { ChatMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { User, FileText, Download, ClipboardCopy } from "lucide-react";
-import { PasquaIcon } from "@/components/icons/PasquaIcon"; // Changed from Bot
+import { PasquaIcon } from "@/components/icons/PasquaIcon";
 import Image from 'next/image';
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
 // Helper function to process message text
-const processMessageContent = (textContent: string | React.ReactNode): React.ReactNode => {
-  if (typeof textContent === 'string') {
-    // Remove markdown-like bold/italic asterisks
-    const cleanedText = textContent
-      .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold **text**
-      .replace(/\*(.*?)\*/g, '$1');    // Remove italic *text*
+const processMessageContent = (textContent: string | React.ReactNode): React.ReactNode[] => {
+  // Guard clauses for non-string inputs
+  if (typeof textContent !== 'string') {
+    if (React.isValidElement(textContent)) return [textContent]; // Already a valid React element
+    if (Array.isArray(textContent)) return textContent; // Already an array of nodes
+    if (typeof textContent === 'object' && textContent !== null) {
+      return [<span key="error_reload">{"[Error message: Content cannot be displayed after reload]"}</span>];
+    }
+    return textContent ? [textContent] : []; // Fallback for other types or empty
+  }
 
-    // Handle line breaks
-    return cleanedText.split('\n').map((line, index, arr) => (
-      <React.Fragment key={index}>
-        {line}
-        {index < arr.length - 1 && <br />}
-      </React.Fragment>
-    ));
+  const elements: React.ReactNode[] = [];
+  const lines = textContent.split('\n');
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+
+    // Heading detection and styling (applied first)
+    if (line.startsWith('# ')) {
+      line = line.substring(2).replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').trim();
+      elements.push(<span key={`line-${i}`} className="block text-xl font-semibold mt-3 mb-1.5 leading-tight">{line}</span>);
+      continue;
+    } else if (line.startsWith('## ')) {
+      line = line.substring(3).replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').trim();
+      elements.push(<span key={`line-${i}`} className="block text-lg font-semibold mt-2 mb-1 leading-tight">{line}</span>);
+      continue;
+    } else if (line.startsWith('### ')) {
+      line = line.substring(4).replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').trim();
+      elements.push(<span key={`line-${i}`} className="block text-base font-semibold mt-1.5 mb-0.5 leading-tight">{line}</span>);
+      continue;
+    }
+
+    // Horizontal rule detection (e.g., "---", "***", "___")
+    if (line.match(/^(\s*([*\-_])\s*){3,}\s*$/)) {
+        elements.push(<hr key={`line-${i}`} className="my-3 border-border/50" />);
+        continue;
+    }
+    
+    // General asterisk removal and basic markdown symbol cleanup for non-heading lines
+    line = line.replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1');
+    line = line.replace(/^(\s*-\s+|\s*\*\s*|\s*>\s*)/, ''); // remove list/quote markers at line start
+
+    if (line.trim() === "") {
+      // If the line is empty and the previous element was simple text, add a <br> to create paragraph breaks.
+      // Avoid adding <br> if the previous element was already a block-level (like a heading or hr) or another <br>.
+      if (elements.length > 0) {
+        const lastElement = elements[elements.length - 1];
+        if (typeof lastElement === 'string' || (React.isValidElement(lastElement) && lastElement.type === 'br')) {
+          // If the last element was text or already a br, we might want a single br for an empty line.
+          // This logic can be fine-tuned. For now, let's add one <br> for an empty line if it's not the first.
+           if (elements.length > 0 && ! (React.isValidElement(lastElement) && (lastElement.type === 'hr' || (typeof lastElement.props?.className === 'string' && lastElement.props.className.includes('block')) ) ) ) {
+             elements.push(<br key={`break-empty-${i}`} />);
+           }
+        }
+      }
+      continue; 
+    }
+    
+    elements.push(line);
+
+    // Add <br /> if it's not the last line AND the next line isn't a heading or hr
+    if (i < lines.length - 1) {
+        const nextLine = lines[i+1];
+        if (!nextLine.match(/^#{1,3}\s/) && !nextLine.match(/^(\s*([*\-_])\s*){3,}\s*$/) && nextLine.trim() !== "") {
+            elements.push(<br key={`break-text-${i}`} />);
+        }
+    }
   }
-  // If it's already a ReactNode (e.g., an error message from localStorage), return as is
-  if (React.isValidElement(textContent) || Array.isArray(textContent)) {
-    return textContent;
-  }
-  // Fallback for other object types that might have been stored and are not valid React children
-  if (typeof textContent === 'object' && textContent !== null) {
-    return "[Error message: Content cannot be displayed after reload]";
-  }
-  return textContent;
+  return elements.filter(el => el !== null && el !== undefined); // Filter out any potential nulls
 };
 
 
@@ -43,12 +88,9 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
   const isUser = sender === "user";
   const { toast } = useToast();
 
-  let contentToRender = text;
-  if (typeof text === 'object' && text !== null && !React.isValidElement(text) && !Array.isArray(text)) {
-    contentToRender = "[Error message: Content cannot be displayed after reload]";
-  }
-  
-  const displayedText = isUser ? contentToRender : processMessageContent(contentToRender);
+  // Process text only when not streaming. During streaming, raw text is shown.
+  // `displayedText` will be React.ReactNode[] after processing.
+  const displayedText = !isStreaming ? processMessageContent(text) : null;
 
   const handleDownload = () => {
     if (media) {
@@ -62,7 +104,7 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
   };
 
   const handleCopy = async () => {
-    if (typeof text === 'string') { // Always copy the raw string text
+    if (typeof text === 'string') { 
       try {
         await navigator.clipboard.writeText(text);
         toast({
@@ -87,8 +129,7 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
       )}
     >
       {!isUser && (
-        <Avatar className="h-8 w-8 border border-border shadow-sm shrink-0">
-          {/* AI uses PasquaIcon, transparent background for the fallback to let icon color shine */}
+        <Avatar className="h-8 w-8 border border-border shadow-sm shrink-0 self-start mt-1"> {/* Avatar aligns top */}
           <AvatarFallback className="bg-transparent text-primary">
             <PasquaIcon className="h-5 w-5" />
           </AvatarFallback>
@@ -96,16 +137,16 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
       )}
       
       {isUser ? (
-        // User message styling: in a box with accent background
+        // User message styling
         <div
           className={cn(
             "relative max-w-[80%] rounded-lg px-4 py-3 shadow-md break-words flex flex-col gap-2",
-            "bg-accent text-accent-foreground rounded-br-none" // User messages get the accent color
+            "bg-accent text-accent-foreground rounded-br-none" 
           )}
         >
           {media && (
             <div className="mt-1 p-2 rounded-md bg-opacity-20 backdrop-blur-sm"
-                 style={{ backgroundColor: 'rgba(0,0,0,0.05)'}}> {/* Standardized subtle media background */}
+                 style={{ backgroundColor: 'rgba(0,0,0,0.05)'}}> 
               {media.type.startsWith("image/") ? (
                 <Image
                   src={media.dataUri}
@@ -138,21 +179,18 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
             </div>
           )}
           {/* User text content */}
-          {(typeof displayedText === 'string' && displayedText.trim()) || React.isValidElement(displayedText) || Array.isArray(displayedText) ? (
-            <div>{isStreaming && sender === "ai" ? `${displayedText}▌` : displayedText}</div>
+          {(typeof text === 'string' && text.trim()) || React.isValidElement(text) || (Array.isArray(text) && text.length >0) ? (
+            <div>{text}</div> // User raw text
           ) : null}
-          {!displayedText && !media && isStreaming && sender === "ai" && (
-            <div>▌</div>
-          )}
-           {!displayedText && !media && !isStreaming && (
+           {!text && !media && ( // Covers both user and AI for empty if no text and no media
             <div className="italic opacity-80">(empty message)</div>
           )}
         </div>
       ) : (
-        // AI message styling: no box, text directly on background
-        <div className="flex-1 flex flex-col items-start max-w-[80%] group relative pt-0.5"> {/* pt-0.5 to align text better with avatar center */}
+        // AI message styling
+        <div className="flex-1 flex flex-col items-start max-w-[80%] group relative">
           {media && (
-             <div className="mt-1 mb-2 p-2 rounded-md bg-card border border-border"> {/* Media for AI in a subtle card */}
+             <div className="mt-1 mb-2 p-2 rounded-md bg-card border border-border"> 
               {media.type.startsWith("image/") ? (
                 <Image
                   src={media.dataUri}
@@ -185,25 +223,33 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
             </div>
           )}
           {/* AI text content */}
-          <div className="text-foreground break-words w-full">
-            {(typeof displayedText === 'string' && displayedText.trim()) || React.isValidElement(displayedText) || Array.isArray(displayedText) ? (
-               isStreaming ? <>{displayedText}▌</> : displayedText
-            ) : null}
+          <div className="text-foreground break-words w-full leading-relaxed">
+            {isStreaming ? (
+              <>
+                {text} 
+                <span className="inline-block animate-pulse">▌</span>
+              </>
+            ) : (
+              displayedText // This is React.ReactNode[]
+            )}
           </div>
 
-          {!displayedText && !media && isStreaming && (
-            <div className="text-foreground">▌</div>
-          )}
-           {!displayedText && !media && !isStreaming && (
+          {/* Fallback for truly empty messages (no text, no media) */}
+          {!isStreaming && !media && (!text || (typeof text === 'string' && text.trim() === '')) && (!displayedText || displayedText.length === 0) && (
             <div className="italic text-muted-foreground">(empty message)</div>
           )}
+          
+          {/* Still show cursor if streaming, no text, no media */}
+          {isStreaming && !media && (!text || (typeof text === 'string' && text.trim() === '')) && (
+             <div className="text-foreground"><span className="inline-block animate-pulse">▌</span></div>
+          )}
+
 
           {!isUser && !isStreaming && typeof text === 'string' && text.trim() && (
             <Button
               variant="ghost"
               size="icon"
               onClick={handleCopy}
-              // Positioned to the right of the text flow, appears on hover of the message item.
               className="absolute top-0 -right-8 h-7 w-7 text-muted-foreground opacity-0 group-hover/message:opacity-100 transition-opacity"
               aria-label="Copy message"
             >
@@ -214,8 +260,8 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
       )}
 
       {isUser && (
-        <Avatar className="h-8 w-8 border border-border shadow-sm shrink-0">
-          <AvatarFallback className="bg-primary text-primary-foreground"> {/* User avatar remains primary */}
+        <Avatar className="h-8 w-8 border border-border shadow-sm shrink-0 self-start mt-1"> {/* User avatar also aligns top */}
+          <AvatarFallback className="bg-primary text-primary-foreground"> 
             <User className="h-5 w-5" />
           </AvatarFallback>
         </Avatar>
@@ -223,4 +269,3 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
     </div>
   );
 }
-
