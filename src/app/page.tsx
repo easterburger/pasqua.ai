@@ -1,7 +1,20 @@
 
 "use client";
 
-import * as React from "react";
+import React from "react";
+import type { ChatMessage, ChatSession } from "@/lib/types";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { v4 as uuidv4 } from 'uuid';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -14,19 +27,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SidebarInset, useSidebar } from "@/components/ui/sidebar";
 import { ChatHistorySidebar } from "@/components/sidebar/ChatHistorySidebar";
-import type { ChatMessage, ChatSession } from "@/lib/types";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-
 
 // Define the structure for chat history parts as expected by Gemini API
 interface GeminiContentPart {
@@ -58,6 +58,11 @@ export default function ChatPage() {
   const [currentMessages, setCurrentMessages] = React.useState<ChatMessage[]>([]);
   const [isTemporaryChat, setIsTemporaryChat] = React.useState(false);
 
+  // State for inline title editing
+  const [editingChatSessionId, setEditingChatSessionId] = React.useState<string | null>(null);
+  const [titleInputValue, setTitleInputValue] = React.useState('');
+  const titleInputRef = React.useRef<HTMLInputElement>(null);
+
 
   // Load API Key and Chat Sessions from localStorage
   React.useEffect(() => {
@@ -79,14 +84,14 @@ export default function ChatPage() {
           setCurrentMessages(lastNonTemporarySession.messages);
           setIsTemporaryChat(lastNonTemporarySession.isTemporary || false);
         } else {
-          handleNewChat(false);
+          handleNewChat(false); // Creates a new non-temporary chat
         }
       } catch (error) {
         console.error("Failed to parse chat sessions from localStorage:", error);
-        handleNewChat(false);
+        handleNewChat(false); // Creates a new non-temporary chat
       }
     } else {
-      handleNewChat(false);
+      handleNewChat(false); // Creates a new non-temporary chat
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -97,7 +102,6 @@ export default function ChatPage() {
     if (sessionsToSave.length > 0) {
       localStorage.setItem(CHAT_SESSIONS_LOCAL_STORAGE_KEY, JSON.stringify(sessionsToSave));
     } else {
-      // If no non-temporary sessions exist (or only temporary ones), remove the key from localStorage
       localStorage.removeItem(CHAT_SESSIONS_LOCAL_STORAGE_KEY);
     }
   }, [chatSessions]);
@@ -112,13 +116,22 @@ export default function ChatPage() {
     }
   }, [currentMessages]);
 
+  // Effect to focus input when title editing starts
+  React.useEffect(() => {
+    if (editingChatSessionId && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [editingChatSessionId]);
+
+
   const handleApiKeySave = (newApiKey: string) => {
     setApiKey(newApiKey);
     localStorage.setItem(API_KEY_LOCAL_STORAGE_KEY, newApiKey);
     setIsApiKeyDialogOpen(false);
   };
 
-  const updateChatSession = (sessionId: string, updatedMessages: ChatMessage[]) => {
+  const updateChatSessionMessages = (sessionId: string, updatedMessages: ChatMessage[]) => {
     setChatSessions(prevSessions =>
       prevSessions.map(session =>
         session.id === sessionId
@@ -129,45 +142,12 @@ export default function ChatPage() {
                       ? (updatedMessages[0].text as string).substring(0, 30) + ((updatedMessages[0].text as string).length > 30 ? '...' : '')
                       : session.title,
               lastUpdatedAt: Date.now(),
-              isTemporary: chatSessions.find(s => s.id === sessionId)?.isTemporary || isTemporaryChat,
             }
           : session
       )
     );
   };
 
-
-  const addMessageToCurrentChat = (sender: "user" | "ai", text: string | React.ReactNode, isStreaming = false) => {
-    const newMessage: ChatMessage = {
-      id: uuidv4(),
-      sender,
-      text,
-      isStreaming,
-      timestamp: Date.now()
-    };
-
-    setCurrentMessages(prevMessages => {
-      const newMessages = [...prevMessages, newMessage];
-      if (activeChatId) {
-        updateChatSession(activeChatId, newMessages);
-      }
-      return newMessages;
-    });
-  };
-
-  const updateLastMessageInCurrentChat = (text: string | React.ReactNode, isStreaming = false) => {
-    setCurrentMessages(prevMessages => {
-      const updatedMessages = prevMessages.map((msg, index) =>
-        index === prevMessages.length - 1
-        ? { ...msg, text, isStreaming, timestamp: Date.now() }
-        : msg
-      );
-      if (activeChatId) {
-        updateChatSession(activeChatId, updatedMessages);
-      }
-      return updatedMessages;
-    });
-  };
 
   const handleSendMessage = async (messageText: string) => {
     if (!apiKey) {
@@ -179,26 +159,27 @@ export default function ChatPage() {
       setIsApiKeyDialogOpen(true);
       return;
     }
+    if (editingChatSessionId) {
+      setEditingChatSessionId(null); // Cancel title editing if a message is sent
+    }
 
     let currentActiveChatId = activeChatId;
-    let tempMessages = currentMessages;
+    let tempMessages = [...currentMessages]; // Important: clone currentMessages
 
-    if (!currentActiveChatId) {
-      const newId = uuidv4();
-      const newChat: ChatSession = {
-        id: newId,
-        title: "New Chat",
-        messages: [],
-        createdAt: Date.now(),
-        lastUpdatedAt: Date.now(),
-        isTemporary: isTemporaryChat,
-      };
-      setChatSessions(prev => [...prev, newChat]);
-      setActiveChatId(newId);
-      setCurrentMessages([]); // Start with empty messages for the new chat
-      tempMessages = []; // Ensure tempMessages is also empty for the new chat
-      currentActiveChatId = newId;
+    const currentActiveSessionDetails = activeChatId ? chatSessions.find(s => s.id === activeChatId) : null;
+    const currentActiveChatIsPristineTemporary = currentActiveSessionDetails?.isTemporary && currentMessages.length === 0;
+
+
+    if (!currentActiveChatId || (isTemporaryChat && !currentActiveChatIsPristineTemporary)) {
+        const newId = handleNewChat(false); // Create a new persistent chat
+        currentActiveChatId = newId;
+        tempMessages = []; // Start with empty messages for this new chat
+    } else if (isTemporaryChat && currentActiveChatIsPristineTemporary && currentActiveChatId) {
+        // Convert current temporary chat to persistent
+        setChatSessions(prev => prev.map(s => s.id === currentActiveChatId ? {...s, isTemporary: false, lastUpdatedAt: Date.now()} : s));
+        setIsTemporaryChat(false); // Switch global toggle
     }
+
 
     const userMessage: ChatMessage = {
       id: uuidv4(),
@@ -206,9 +187,14 @@ export default function ChatPage() {
       text: messageText,
       timestamp: Date.now(),
     };
+    
     tempMessages = [...tempMessages, userMessage];
+    setCurrentMessages(tempMessages); // Update UI immediately with user message
 
-
+    if (currentActiveChatId) {
+        updateChatSessionMessages(currentActiveChatId, tempMessages);
+    }
+    
     const aiPlaceholderMessage: ChatMessage = {
         id: uuidv4(),
         sender: "ai",
@@ -216,23 +202,22 @@ export default function ChatPage() {
         isStreaming: true,
         timestamp: Date.now()
     };
+    
     tempMessages = [...tempMessages, aiPlaceholderMessage];
+    setCurrentMessages(tempMessages); // Update UI with AI placeholder
 
-    setCurrentMessages(tempMessages);
     if (currentActiveChatId) {
-        updateChatSession(currentActiveChatId, tempMessages);
+        updateChatSessionMessages(currentActiveChatId, tempMessages);
     }
 
     setIsLoading(true);
 
-    // Construct history from messages *before* the AI placeholder for the current turn.
-    // Filter out any messages where `text` is not a string (e.g., client-side JSX error messages).
     const historyToSend: GeminiContent[] = tempMessages
-        .slice(0, -1) // Remove the AI streaming placeholder we just added
-        .filter(msg => typeof msg.text === 'string') // Critical: only use string messages for history
+        .slice(0, -1) // Exclude the AI placeholder for the current turn
+        .filter(msg => typeof msg.text === 'string')
         .map(msg => ({
             role: msg.sender === 'user' ? 'user' : 'model',
-            parts: [{ text: msg.text as string }], // msg.text is now definitely a string
+            parts: [{ text: msg.text as string }], 
         }));
 
     let accumulatedResponse = "";
@@ -266,7 +251,7 @@ export default function ChatPage() {
                   const parsed = JSON.parse(jsonStr);
                   if (parsed.candidates?.[0]?.content?.parts?.[0]?.text) {
                     accumulatedResponse += parsed.candidates[0].content.parts[0].text;
-                  } else if (parsed.error) { /* Error handling in stream done below */ }
+                  } 
                 }
               } catch (e) { console.warn("Error parsing final JSON chunk:", e, "Buffer:", lastLine); }
             }
@@ -290,61 +275,78 @@ export default function ChatPage() {
                  const textPart = parsed.candidates[0].content.parts[0].text;
                  if (textPart) {
                     accumulatedResponse += textPart;
-                    updateLastMessageInCurrentChat(accumulatedResponse, true);
+                    setCurrentMessages(prevMsgs => {
+                        const updated = prevMsgs.map((msg, index) =>
+                            index === prevMsgs.length - 1 // Target the last message (AI placeholder)
+                            ? { ...msg, text: accumulatedResponse, isStreaming: true } // Keep timestamp from placeholder
+                            : msg
+                        );
+                        // No session update here for performance during streaming
+                        return updated;
+                    });
                  }
               } else if (parsed.error) {
                 console.error("API error in stream:", parsed.error.message);
-                updateLastMessageInCurrentChat(
-                  <div className="text-destructive">
-                    <AlertTriangle className="inline-block mr-2 h-4 w-4" />
-                    Error from API: {parsed.error.message}
-                  </div>, false
+                const errorText = (
+                    <div className="text-destructive">
+                        <AlertTriangle className="inline-block mr-2 h-4 w-4" />
+                        Error from API: {parsed.error.message}
+                    </div>
                 );
+                setCurrentMessages(prevMsgs => {
+                    const updated = prevMsgs.map((msg, index) =>
+                        index === prevMsgs.length - 1
+                        ? { ...msg, text: errorText, isStreaming: false }
+                        : msg
+                    );
+                    if(currentActiveChatId) updateChatSessionMessages(currentActiveChatId, updated.map(m => ({...m, isStreaming: false})));
+                    return updated;
+                });
                 setIsLoading(false);
-                if (currentActiveChatId) {
-                    setCurrentMessages(prev => {
-                        const finalMsgs = prev.map(m => m.id === prev[prev.length-1].id ? {...m, isStreaming: false} : m );
-                        updateChatSession(currentActiveChatId, finalMsgs);
-                        return finalMsgs;
-                    });
-                }
                 return;
               }
             } catch (e) { console.warn("Error parsing streaming JSON chunk:", e, "Line:", line); }
           }
         }
       }
-
-      if (accumulatedResponse) {
-        updateLastMessageInCurrentChat(accumulatedResponse, false);
-      } else {
-        setCurrentMessages(prev => {
-            const lastMsg = prev[prev.length-1];
-            if (lastMsg?.sender === 'ai' && lastMsg?.isStreaming && lastMsg?.text === "") {
-                const updated = prev.map((msg, index) => index === prev.length-1 ? {...msg, text: "No text content in response.", isStreaming: false} : msg);
-                if (currentActiveChatId) updateChatSession(currentActiveChatId, updated);
-                return updated;
-            }
-            return prev;
-        });
-      }
+      
+      setCurrentMessages(prevMsgs => {
+        const finalResponse = accumulatedResponse || "No text content in response.";
+        const updated = prevMsgs.map((msg, index) =>
+            index === prevMsgs.length - 1
+            ? { ...msg, text: finalResponse, isStreaming: false }
+            : msg
+        );
+        if(currentActiveChatId) updateChatSessionMessages(currentActiveChatId, updated);
+        return updated;
+      });
 
     } catch (error) {
       console.error("Error calling Gemini API:", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      updateLastMessageInCurrentChat(
-        <div className="text-destructive">
-          <AlertTriangle className="inline-block mr-2 h-4 w-4" />
-          Error: {errorMessage}
-        </div>, false
+      const errorText = (
+          <div className="text-destructive">
+            <AlertTriangle className="inline-block mr-2 h-4 w-4" />
+            Error: {errorMessage}
+          </div>
       );
+      setCurrentMessages(prevMsgs => {
+        const updated = prevMsgs.map((msg, index) =>
+            index === prevMsgs.length - 1
+            ? { ...msg, text: errorText, isStreaming: false }
+            : msg
+        );
+        if(currentActiveChatId) updateChatSessionMessages(currentActiveChatId, updated);
+        return updated;
+      });
       toast({ title: "API Error", description: errorMessage, variant: "destructive" });
     } finally {
       setIsLoading(false);
+      // Final update to session after streaming finishes or errors
       if (currentActiveChatId) {
         setCurrentMessages(prev => {
-            const finalMessages = prev.map(m => ({...m, isStreaming: false}));
-            updateChatSession(currentActiveChatId, finalMessages);
+            const finalMessages = prev.map(m => ({...m, isStreaming: false})); // Ensure all streaming flags are false
+            updateChatSessionMessages(currentActiveChatId, finalMessages);
             return finalMessages;
         });
       }
@@ -353,6 +355,9 @@ export default function ChatPage() {
 
   const handleNewChat = (temporary: boolean) => {
     if (isLoading) return "";
+    if (editingChatSessionId) {
+      setEditingChatSessionId(null); // Cancel title editing
+    }
 
     const newChatId = uuidv4();
     const newChat: ChatSession = {
@@ -373,6 +378,9 @@ export default function ChatPage() {
 
   const handleSelectChat = (sessionId: string) => {
     if (isLoading) return;
+    if (editingChatSessionId && editingChatSessionId !== sessionId) { // Cancel only if switching away from edited chat
+      setEditingChatSessionId(null);
+    }
 
     const selectedChat = chatSessions.find(session => session.id === sessionId);
     if (selectedChat) {
@@ -385,6 +393,9 @@ export default function ChatPage() {
 
   const handleDeleteChat = (sessionId: string) => {
     if (isLoading) return;
+     if (editingChatSessionId === sessionId) {
+      setEditingChatSessionId(null); // Cancel editing if the edited chat is deleted
+    }
 
     setChatSessions(prev => prev.filter(session => session.id !== sessionId));
     if (activeChatId === sessionId) {
@@ -392,19 +403,22 @@ export default function ChatPage() {
       if (remainingSessions.length > 0) {
         handleSelectChat(remainingSessions[0].id);
       } else {
-        handleNewChat(false);
+        handleNewChat(false); // Create a new non-temporary chat
       }
     }
   };
 
   const handleTemporaryChatToggle = (checked: boolean) => {
     if (isLoading) return;
+    if (editingChatSessionId) {
+      setEditingChatSessionId(null); // Cancel title editing
+    }
 
     setIsTemporaryChat(checked);
     if (activeChatId) {
         const currentActiveChat = chatSessions.find(c => c.id === activeChatId);
         if(currentActiveChat && currentActiveChat.messages.length === 0) {
-            setChatSessions(prev => prev.map(s => s.id === activeChatId ? {...s, isTemporary: checked} : s));
+            setChatSessions(prev => prev.map(s => s.id === activeChatId ? {...s, isTemporary: checked, lastUpdatedAt: Date.now()} : s));
         } else if (checked) {
             handleNewChat(true);
         } else {
@@ -415,7 +429,50 @@ export default function ChatPage() {
     }
   };
 
-  const currentChatTitle = chatSessions.find(s => s.id === activeChatId)?.title || "Pasqua AI Chat";
+  const startEditingTitle = (sessionId: string) => {
+    const session = chatSessions.find(s => s.id === sessionId);
+    if (session) {
+      setEditingChatSessionId(sessionId);
+      setTitleInputValue(session.title === "New Chat" && session.messages.length === 0 ? "" : session.title); // Clear "New Chat" for pristine chats
+    }
+  };
+
+  const saveChatTitle = (sessionId: string) => {
+    const trimmedTitle = titleInputValue.trim();
+    if (!trimmedTitle) {
+      toast({ title: "Error", description: "Chat title cannot be empty.", variant: "destructive" });
+      const originalSession = chatSessions.find(s => s.id === sessionId);
+      // Revert to "New Chat" if it was pristine and attempted to be saved empty, otherwise original title
+      if (originalSession) setTitleInputValue(originalSession.title === "New Chat" && originalSession.messages.length === 0 ? "" : originalSession.title);
+      // Do not exit editing mode on empty save, allow user to correct
+      // setEditingChatSessionId(null); 
+      return;
+    }
+    setChatSessions(prevSessions =>
+      prevSessions.map(session =>
+        session.id === sessionId ? { ...session, title: trimmedTitle, lastUpdatedAt: Date.now() } : session
+      )
+    );
+    setEditingChatSessionId(null);
+  };
+
+  const cancelEditTitle = () => {
+    const session = chatSessions.find(s => s.id === editingChatSessionId);
+    if (session) {
+        setTitleInputValue(session.title); // Revert to original title on cancel
+    }
+    setEditingChatSessionId(null);
+  };
+
+
+  const activeSession = chatSessions.find(s => s.id === activeChatId);
+  const currentActualChatTitle = activeSession?.title || "New Chat";
+  const currentChatTitleToDisplay =
+    (currentActualChatTitle === "New Chat" && (!activeSession || activeSession.messages.length === 0))
+    ? "Pasqua AI Chat"
+    : currentActualChatTitle;
+  const isCurrentlyEditingThisTitle = editingChatSessionId === activeChatId;
+
 
   return (
     <div className="flex h-screen w-full">
@@ -431,45 +488,84 @@ export default function ChatPage() {
       <SidebarInset>
         <div className="flex h-screen flex-col items-center bg-background text-foreground">
           <header className="w-full flex justify-between items-center p-3 md:p-4 border-b border-border sticky top-0 bg-background z-10">
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" onClick={toggleSidebar} className="md:hidden" aria-label="Toggle History" disabled={isLoading}>
+            <div className="flex items-center gap-2 flex-grow min-w-0">
+              <Button variant="ghost" size="icon" onClick={toggleSidebar} className="md:hidden shrink-0" aria-label="Toggle History" disabled={isLoading || isCurrentlyEditingThisTitle}>
                 <PasquaIcon className="h-6 w-6 text-primary" />
               </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="text-lg font-semibold px-2" disabled={isLoading}>
-                    {currentChatTitle === "New Chat" ? "Pasqua AI Chat" : currentChatTitle}
-                    <MoreHorizontal className="h-4 w-4 ml-1 opacity-50"/>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  <DropdownMenuLabel>Chat Options</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => handleNewChat(false)} disabled={isLoading}>New Persistent Chat</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleNewChat(true)} disabled={isLoading}>New Temporary Chat</DropdownMenuItem>
-                  {activeChatId && chatSessions.find(s => s.id === activeChatId)?.messages.length > 0 && (
-                     <DropdownMenuItem
-                        onClick={() => activeChatId && handleDeleteChat(activeChatId)}
-                        className="text-destructive"
-                        disabled={isLoading}>
-                       <Trash2 className="mr-2 h-4 w-4" /> Delete Current Chat
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              
+              <div className="flex items-center gap-1 flex-grow min-w-0">
+                {isCurrentlyEditingThisTitle && activeChatId ? (
+                  <Input
+                    ref={titleInputRef}
+                    value={titleInputValue}
+                    onChange={(e) => setTitleInputValue(e.target.value)}
+                    placeholder="Chat Title"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        saveChatTitle(activeChatId);
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        cancelEditTitle();
+                      }
+                    }}
+                    onBlur={() => {
+                        // Delay blur to allow other click events like save from a button if added
+                        // setTimeout(() => {
+                          if (editingChatSessionId === activeChatId) {
+                             saveChatTitle(activeChatId);
+                          }
+                        // }, 100); // Small delay
+                    }}
+                    className="text-lg font-semibold h-9 px-2 flex-grow bg-card border border-input focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
+                    disabled={isLoading}
+                  />
+                ) : (
+                  <h2 className="text-lg font-semibold truncate px-1 py-1"> {/* Adjusted padding slightly */}
+                    {currentChatTitleToDisplay}
+                  </h2>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-3 md:gap-4">
+
+            <div className="flex items-center gap-2 md:gap-3 shrink-0">
               <div className="flex items-center space-x-2">
                 <Switch
                   id="temporary-chat"
                   checked={isTemporaryChat}
                   onCheckedChange={handleTemporaryChatToggle}
                   aria-label="Temporary Chat Toggle"
-                  disabled={isLoading}
+                  disabled={isLoading || isCurrentlyEditingThisTitle}
                 />
                 <Label htmlFor="temporary-chat" className="text-sm hidden sm:inline">Temporary</Label>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => setIsApiKeyDialogOpen(true)} aria-label="API Key Settings" disabled={isLoading}>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-9 w-9" disabled={isLoading || isCurrentlyEditingThisTitle}>
+                    <MoreHorizontal className="h-5 w-5"/>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Chat Options</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {activeChatId && !isCurrentlyEditingThisTitle && (
+                    <DropdownMenuItem onClick={() => startEditingTitle(activeChatId)} disabled={isLoading}>
+                      <Edit3 className="mr-2 h-4 w-4" /> Rename Chat
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={() => handleNewChat(false)} disabled={isLoading || isCurrentlyEditingThisTitle}>New Persistent Chat</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleNewChat(true)} disabled={isLoading || isCurrentlyEditingThisTitle}>New Temporary Chat</DropdownMenuItem>
+                  {activeChatId && chatSessions.find(s => s.id === activeChatId)?.messages.length > 0 && ( // Show delete only if chat has messages
+                     <DropdownMenuItem
+                        onClick={() => activeChatId && handleDeleteChat(activeChatId)}
+                        className="text-destructive"
+                        disabled={isLoading || isCurrentlyEditingThisTitle}>
+                       <Trash2 className="mr-2 h-4 w-4" /> Delete Current Chat
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button variant="ghost" size="icon" onClick={() => setIsApiKeyDialogOpen(true)} aria-label="API Key Settings" className="h-9 w-9" disabled={isLoading || isCurrentlyEditingThisTitle}>
                 <Settings className="h-5 w-5" />
               </Button>
             </div>
@@ -514,7 +610,7 @@ export default function ChatPage() {
                     </AlertDescription>
                 </Alert>
                 )}
-              <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} disabled={!apiKey || isLoading} />
+              <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} disabled={!apiKey || isLoading || isCurrentlyEditingThisTitle} />
             </div>
           </div>
         </div>
@@ -528,3 +624,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    
