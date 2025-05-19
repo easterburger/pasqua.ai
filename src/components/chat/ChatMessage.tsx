@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Bot, User, FileText, Download } from "lucide-react";
 import Image from 'next/image'; // For optimized image display
+import { Button } from "@/components/ui/button"; // Added import
 
 export function ChatMessage({ sender, text, media, isStreaming, timestamp }: ChatMessage) {
   const isUser = sender === "user";
