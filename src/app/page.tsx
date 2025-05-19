@@ -27,6 +27,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SidebarInset, useSidebar } from "@/components/ui/sidebar";
 import { ChatHistorySidebar } from "@/components/sidebar/ChatHistorySidebar";
+import { useTheme } from "@/components/theme/theme-provider";
+import { ThemeToggleItemContent } from "@/components/theme/theme-toggle-item-content";
+
 
 interface GeminiPart {
   text?: string;
@@ -56,6 +59,8 @@ export default function ChatPage() {
   const { toast } = useToast();
   const scrollAreaRef = React.useRef<HTMLDivElement>(null);
   const { isMobile, toggleSidebar } = useSidebar();
+  const { theme, setTheme } = useTheme();
+
 
   const [chatSessions, setChatSessions] = React.useState<ChatSession[]>([]);
   const [activeChatId, setActiveChatId] = React.useState<string | null>(null);
@@ -210,7 +215,6 @@ export default function ChatPage() {
     }
     
     setCurrentMessages(prev => [...prev, userMessage]);
-    // Update chat session immediately with user message
     if (currentActiveChatIdForRequest) {
         setChatSessions(prevSessions =>
           prevSessions.map(session =>
@@ -245,7 +249,8 @@ export default function ChatPage() {
     const historyToSend: GeminiContent[] = [...tempMessagesForRequestSetup, userMessage]
         .map(msg => {
             const parts: GeminiPart[] = [];
-            if (typeof msg.text === 'string' && msg.text) {
+            // Only include text if it's a non-empty string
+            if (typeof msg.text === 'string' && msg.text.trim()) {
                 parts.push({ text: msg.text });
             }
             if (msg.media) {
@@ -261,7 +266,7 @@ export default function ChatPage() {
                 parts: parts,
             };
         })
-        .filter(content => content.parts.length > 0); 
+        .filter(content => content.parts.length > 0);
 
     let accumulatedResponse = "";
 
@@ -280,7 +285,9 @@ export default function ChatPage() {
             errorResponseMessage = errorData.error.message;
           }
         } catch (e) {
-          console.warn("Could not parse error JSON from API, using status code as fallback.", e);
+          // Non-JSON error response from API
+          console.warn("Could not parse error JSON from API, using status text or code as fallback.", e);
+          errorResponseMessage = response.statusText || `API request failed with status ${response.status}`;
         }
         
         console.error("API Error (non-ok response):", errorResponseMessage);
@@ -300,12 +307,11 @@ export default function ChatPage() {
             return updated;
         });
         toast({ title: "API Error", description: errorResponseMessage, variant: "destructive" });
-        setIsLoading(false); // Ensure isLoading is set to false in this path
-        return; // Stop further processing
+        setIsLoading(false);
+        return; 
       }
 
       if (!response.body) {
-        // This case should ideally not happen if response.ok is true and it's a stream.
         const noBodyErrorMsg = "API request successful, but no response body found for streaming.";
         console.error(noBodyErrorMsg);
         const errorTextComponent = (
@@ -396,8 +402,8 @@ export default function ChatPage() {
                     return updated;
                 });
                 setIsLoading(false);
-                reader.cancel().catch(e => console.warn("Error cancelling reader:", e)); // Cancel the reader
-                return; // Exit from handleSendMessage
+                reader.cancel().catch(e => console.warn("Error cancelling reader:", e)); 
+                return; 
               }
             } catch (e) { console.warn("Error parsing streaming JSON chunk:", e, "Line:", line); }
           }
@@ -415,7 +421,7 @@ export default function ChatPage() {
         return updated;
       });
 
-    } catch (error) { // Catches fetch errors or other unexpected JS errors
+    } catch (error) { 
       console.error("Error calling Gemini API (general catch):", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
       const errorTextComponent = (
@@ -439,7 +445,6 @@ export default function ChatPage() {
       if (currentActiveChatIdForRequest) {
         setCurrentMessages(prev => {
             const finalMessages = prev.map(m => ({...m, isStreaming: false}));
-            // Ensure the session in chatSessions also has isStreaming false for all its messages
             setChatSessions(sessions => sessions.map(s => 
               s.id === currentActiveChatIdForRequest 
               ? {...s, messages: finalMessages, lastUpdatedAt: Date.now()} 
@@ -483,7 +488,7 @@ export default function ChatPage() {
     const selectedChat = chatSessions.find(session => session.id === sessionId);
     if (selectedChat) {
       setActiveChatId(sessionId);
-      setCurrentMessages(selectedChat.messages.map(m => ({...m, isStreaming: false }))); // Ensure no stale streaming states
+      setCurrentMessages(selectedChat.messages.map(m => ({...m, isStreaming: false }))); 
       setIsTemporaryChat(selectedChat.isTemporary || false);
       if (isMobile) toggleSidebar();
     }
@@ -554,6 +559,10 @@ export default function ChatPage() {
         setTitleInputValue(session.title); 
     }
     setEditingChatSessionId(null);
+  };
+  
+  const handleThemeToggle = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
 
@@ -644,6 +653,9 @@ export default function ChatPage() {
                   )}
                   <DropdownMenuItem onClick={() => handleNewChat(false)} disabled={isLoading || isCurrentlyEditingThisTitle}>New Persistent Chat</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleNewChat(true)} disabled={isLoading || isCurrentlyEditingThisTitle}>New Temporary Chat</DropdownMenuItem>
+                   <DropdownMenuItem onClick={handleThemeToggle} disabled={isLoading || isCurrentlyEditingThisTitle}>
+                    <ThemeToggleItemContent />
+                  </DropdownMenuItem>
                   {activeChatId && chatSessions.find(s => s.id === activeChatId && !s.isTemporary && s.messages.length > 0 ) && ( 
                      <DropdownMenuItem
                         onClick={() => activeChatId && handleDeleteChat(activeChatId)}
@@ -717,4 +729,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
