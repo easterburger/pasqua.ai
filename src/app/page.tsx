@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -84,18 +85,21 @@ export default function ChatPage() {
 
     addMessage("user", messageText);
     setIsLoading(true);
+    addMessage("ai", "", true); // Add a placeholder for AI response while streaming
 
     // Prepare history for Gemini API
-    const history: GeminiContent[] = messages.map(msg => ({
-      role: msg.sender === 'user' ? 'user' : 'model',
-      parts: [{ text: typeof msg.text === 'string' ? msg.text : String(msg.text) }], // Convert ReactNode to string for history
-    }));
+    // Exclude the current AI placeholder from history sent to API
+    const history: GeminiContent[] = messages
+      .filter(msg => !(msg.sender === 'ai' && msg.isStreaming && msg.text === "")) 
+      .map(msg => ({
+        role: msg.sender === 'user' ? 'user' : 'model',
+        parts: [{ text: typeof msg.text === 'string' ? msg.text : String(msg.text) }],
+      }));
     
     // Add current user message to history for the API call
     const currentCallHistory = [...history, { role: 'user' as const, parts: [{ text: messageText }] }];
 
-    // Add a placeholder for AI response while streaming
-    addMessage("ai", "", true);
+    let accumulatedResponse = "";
 
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:streamGenerateContent?key=${apiKey}&alt=sse`, {
@@ -113,46 +117,104 @@ export default function ChatPage() {
       
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let accumulatedResponse = "";
+      let buffer = "";
       
       // eslint-disable-next-line no-constant-condition
       while (true) {
         const { value, done } = await reader.read();
-        if (done) break;
-        
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\\n");
+        if (done) {
+          // Process any remaining data in the buffer
+          if (buffer.trim()) {
+            const lastLine = buffer.trim();
+            if (lastLine.startsWith("data: ")) {
+              try {
+                const jsonStr = lastLine.substring(6);
+                if (jsonStr) {
+                  const parsed = JSON.parse(jsonStr);
+                  if (parsed.candidates && parsed.candidates[0].content && parsed.candidates[0].content.parts) {
+                    const textPart = parsed.candidates[0].content.parts[0].text;
+                    if (textPart) accumulatedResponse += textPart;
+                  } else if (parsed.error) {
+                    console.error("API error in final stream chunk:", parsed.error.message);
+                    updateLastMessage(
+                      <div className="text-destructive">
+                        <AlertTriangle className="inline-block mr-2 h-4 w-4" />
+                        Error from API: {parsed.error.message}
+                      </div>, false
+                    );
+                    setIsLoading(false);
+                    return;
+                  }
+                }
+              } catch (e) {
+                console.warn("Error parsing final buffered JSON chunk:", e, "Buffer:", lastLine);
+              }
+            }
+          }
+          break;
+        }
 
-        for (const line of lines) {
+        buffer += decoder.decode(value, { stream: true });
+        let eolIndex;
+        while ((eolIndex = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.substring(0, eolIndex).trim();
+          buffer = buffer.substring(eolIndex + 1);
+
           if (line.startsWith("data: ")) {
             try {
-              const jsonStr = line.substring(6); // Remove "data: "
+              const jsonStr = line.substring(6);
+              if (jsonStr.trim() === "") continue; 
               const parsed = JSON.parse(jsonStr);
+
               if (parsed.candidates && parsed.candidates[0].content && parsed.candidates[0].content.parts) {
                  const textPart = parsed.candidates[0].content.parts[0].text;
                  if (textPart) {
                     accumulatedResponse += textPart;
                     updateLastMessage(accumulatedResponse, true);
                  }
+              } else if (parsed.error) {
+                console.error("API error in stream:", parsed.error.message);
+                updateLastMessage(
+                  <div className="text-destructive">
+                    <AlertTriangle className="inline-block mr-2 h-4 w-4" />
+                    Error from API: {parsed.error.message}
+                  </div>, false
+                );
+                setIsLoading(false);
+                return; 
               }
             } catch (e) {
-              // Potentially malformed JSON or incomplete line, wait for more data
               console.warn("Error parsing streaming JSON chunk:", e, "Line:", line);
             }
           }
         }
       }
-      updateLastMessage(accumulatedResponse, false); // Final update, streaming finished
+
+      if (accumulatedResponse) {
+        updateLastMessage(accumulatedResponse, false);
+      } else {
+        // If loop finished, no stream error, but no text.
+        const lastMessage = messages.length > 0 ? messages[messages.length -1] : null;
+        // Check if the AI placeholder is still the last message and empty.
+        if (lastMessage && lastMessage.sender === 'ai' && lastMessage.isStreaming && typeof lastMessage.text === 'string' && lastMessage.text === "") {
+            updateLastMessage("No text content in response.", false);
+        }
+        // If an error updated the message, this won't overwrite it.
+      }
 
     } catch (error) {
       console.error("Error calling Gemini API:", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      updateLastMessage(
-        <div className="text-destructive">
-          <AlertTriangle className="inline-block mr-2 h-4 w-4" />
-          Error: {errorMessage}
-        </div>, false
-      );
+      // Check if the last message is still the AI placeholder before overwriting
+      const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+      if (lastMessage && lastMessage.sender === 'ai' && lastMessage.isStreaming && typeof lastMessage.text === 'string' && lastMessage.text === "") {
+        updateLastMessage(
+          <div className="text-destructive">
+            <AlertTriangle className="inline-block mr-2 h-4 w-4" />
+            Error: {errorMessage}
+          </div>, false
+        );
+      }
       toast({
         title: "API Error",
         description: errorMessage,
@@ -165,7 +227,7 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-screen flex-col items-center bg-background text-foreground p-4 md:p-6">
-      <header className="w-full max-w-4xl flex justify-between items-center mb-4 md:mb-6">
+      <header className="w-full max-w-5xl flex justify-between items-center mb-4 md:mb-6">
         <div className="flex items-center gap-2">
           <PasquaIcon className="h-8 w-8 text-primary" />
           <h1 className="text-2xl font-semibold">Pasqua AI Chat</h1>
@@ -175,7 +237,7 @@ export default function ChatPage() {
         </Button>
       </header>
 
-      <div className="flex-1 w-full max-w-4xl overflow-hidden flex flex-col rounded-lg border border-border shadow-lg bg-card">
+      <div className="flex-1 w-full max-w-5xl overflow-hidden flex flex-col rounded-lg border border-border shadow-lg bg-card">
         <ScrollArea className="flex-1 p-4 md:p-6" ref={scrollAreaRef}>
           {messages.length === 0 && !isLoading && (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
@@ -188,17 +250,14 @@ export default function ChatPage() {
           {messages.map((msg) => (
             <ChatMessage key={msg.id} {...msg} />
           ))}
-          {isLoading && messages[messages.length -1]?.sender !== 'ai' && ( // Show loading specifically if last message isn't AI's placeholder
-             <ChatMessage id="loading" sender="ai" text="Thinking..." isStreaming={true} />
-          )}
         </ScrollArea>
-        <div className="p-3 md:p-4 border-t border-border bg-card"> {/* Ensure input area bg matches chat area bg */}
+        <div className="p-3 md:p-4 border-t border-border bg-card">
           <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} disabled={!apiKey} />
         </div>
       </div>
       
       {!apiKey && (
-        <Alert variant="destructive" className="w-full max-w-4xl mt-4">
+        <Alert variant="destructive" className="w-full max-w-5xl mt-4">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>API Key Required</AlertTitle>
           <AlertDescription>
@@ -215,3 +274,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    
