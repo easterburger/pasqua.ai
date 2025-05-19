@@ -22,20 +22,20 @@ import { ChatMessage as ChatMessageComponent } from "@/components/chat/ChatMessa
 import { ApiKeyDialog } from "@/components/chat/ApiKeyDialog";
 import { API_KEY_LOCAL_STORAGE_KEY, CHAT_SESSIONS_LOCAL_STORAGE_KEY } from "@/lib/constants";
 import { PasquaIcon } from "@/components/icons/PasquaIcon";
-import { Settings, AlertTriangle, Lightbulb, Telescope, Zap, MoreHorizontal, Edit3, Trash2 } from "lucide-react";
+import { Settings, AlertTriangle, Lightbulb, Telescope, Zap, MoreHorizontal, Edit3, Trash2, PanelLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { SidebarInset, useSidebar } from "@/components/ui/sidebar";
+import { SidebarInset, useSidebar, SidebarTrigger } from "@/components/ui/sidebar";
 import { ChatHistorySidebar } from "@/components/sidebar/ChatHistorySidebar";
 import { useTheme } from "@/components/theme/theme-provider";
 import { ThemeToggleItemContent } from "@/components/theme/theme-toggle-item-content";
-import { generateChatResponseFlow, type HistoryMessage, type GenerateChatResponseInput } from "@/ai/flows/generate-chat-response-flow";
+
 
 const examplePrompts = [
   { title: "Brainstorm ideas", description: "for my new indie game", icon: Lightbulb },
   { title: "Explain a complex topic", description: "like quantum computing in simple terms", icon: Zap },
   { title: "Write a poem", description: "about the beauty of nature", icon: Edit3 },
-  { title: "Summarize an article", description: "from a URL you provide", icon: Telescope },
+  { title: "Summarize an article", description: "from a URL you provide (Note: URL fetching not yet implemented)", icon: Telescope },
 ];
 
 
@@ -45,7 +45,7 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = React.useState(false);
   const { toast } = useToast();
   const scrollAreaRef = React.useRef<HTMLDivElement>(null);
-  const { isMobile, toggleSidebar } = useSidebar();
+  const { isMobile, toggleSidebar, state: sidebarState } = useSidebar();
   const { theme, setTheme } = useTheme();
 
 
@@ -63,8 +63,9 @@ export default function ChatPage() {
     const storedApiKey = localStorage.getItem(API_KEY_LOCAL_STORAGE_KEY);
     if (storedApiKey) {
       setApiKey(storedApiKey);
+    } else {
+      setIsApiKeyDialogOpen(true); // Prompt for API key if not found
     }
-    // No longer forcing API key dialog if Genkit server-side keys are expected.
 
     const storedSessions = localStorage.getItem(CHAT_SESSIONS_LOCAL_STORAGE_KEY);
     if (storedSessions) {
@@ -77,14 +78,14 @@ export default function ChatPage() {
           setCurrentMessages(lastNonTemporarySession.messages.map(m => ({...m, isStreaming: false})));
           setIsTemporaryChat(lastNonTemporarySession.isTemporary || false);
         } else {
-          handleNewChat(false); 
+          handleNewChat(false);
         }
       } catch (error) {
         console.error("Failed to parse chat sessions from localStorage:", error);
-        handleNewChat(false); 
+        handleNewChat(false);
       }
     } else {
-      handleNewChat(false); 
+      handleNewChat(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -117,7 +118,6 @@ export default function ChatPage() {
 
   const handleApiKeySave = (newApiKey: string) => {
     setApiKey(newApiKey);
-    localStorage.setItem(API_KEY_LOCAL_STORAGE_KEY, newApiKey);
     setIsApiKeyDialogOpen(false);
     toast({ title: "API Key Saved", description: "Your Gemini API key has been saved." });
   };
@@ -129,8 +129,8 @@ export default function ChatPage() {
           ? {
               ...session,
               messages: updatedMessages,
-              title: newTitle 
-                     ? newTitle 
+              title: newTitle
+                     ? newTitle
                      : (session.title === "New Chat" && updatedMessages.length > 0 && typeof updatedMessages[0].text === 'string'
                         ? (updatedMessages[0].text as string).substring(0, 30) + ((updatedMessages[0].text as string).length > 30 ? '...' : '')
                         : session.title),
@@ -143,26 +143,31 @@ export default function ChatPage() {
 
 
   const handleSendMessage = async (messageText: string, mediaPayload?: ChatMessageMedia) => {
+    if (!apiKey) {
+      toast({ title: "API Key Missing", description: "Please set your Gemini API key in settings.", variant: "destructive" });
+      setIsApiKeyDialogOpen(true);
+      return;
+    }
     if (editingChatSessionId) {
-      setEditingChatSessionId(null); 
+      setEditingChatSessionId(null);
     }
 
     let currentActiveChatIdForRequest = activeChatId;
-    let tempMessagesForRequestSetup = [...currentMessages]; 
+    let tempMessagesForRequestSetup = [...currentMessages];
 
     const currentActiveSessionDetails = activeChatId ? chatSessions.find(s => s.id === activeChatId) : null;
     const currentActiveChatIsPristineTemporary = currentActiveSessionDetails?.isTemporary && tempMessagesForRequestSetup.length === 0;
 
     if (!currentActiveChatIdForRequest || (isTemporaryChat && !currentActiveChatIsPristineTemporary)) {
-        const newId = handleNewChat(false); 
+        const newId = handleNewChat(false);
         currentActiveChatIdForRequest = newId;
-        tempMessagesForRequestSetup = []; 
-         setCurrentMessages([]); // Clear messages for new chat
+        tempMessagesForRequestSetup = [];
+         setCurrentMessages([]);
     } else if (isTemporaryChat && currentActiveChatIsPristineTemporary && currentActiveChatIdForRequest) {
         setChatSessions(prev => prev.map(s => s.id === currentActiveChatIdForRequest ? {...s, isTemporary: false, title: "New Chat", lastUpdatedAt: Date.now()} : s));
-        setIsTemporaryChat(false); 
+        setIsTemporaryChat(false);
     }
-    
+
     const userMessage: ChatMessage = {
       id: uuidv4(),
       sender: "user",
@@ -170,7 +175,7 @@ export default function ChatPage() {
       media: mediaPayload,
       timestamp: Date.now(),
     };
-    
+
     let autoTitle = "";
     if (tempMessagesForRequestSetup.length === 0 && (!currentActiveSessionDetails || currentActiveSessionDetails.title === "New Chat")) {
         if (messageText) {
@@ -179,7 +184,7 @@ export default function ChatPage() {
             autoTitle = mediaPayload.name.substring(0, 30) + (mediaPayload.name.length > 30 ? '...' : '');
         }
     }
-    
+
     const updatedMessagesWithUser = [...tempMessagesForRequestSetup, userMessage];
     setCurrentMessages(updatedMessagesWithUser);
     if (currentActiveChatIdForRequest) {
@@ -197,7 +202,7 @@ export default function ChatPage() {
           )
         );
     }
-    
+
     const aiPlaceholderMessageId = uuidv4();
     const aiPlaceholderMessage: ChatMessage = {
         id: aiPlaceholderMessageId,
@@ -206,7 +211,7 @@ export default function ChatPage() {
         isStreaming: true,
         timestamp: Date.now()
     };
-    
+
     const updatedMessagesWithPlaceholder = [...updatedMessagesWithUser, aiPlaceholderMessage];
     setCurrentMessages(updatedMessagesWithPlaceholder);
     if (currentActiveChatIdForRequest) {
@@ -215,18 +220,18 @@ export default function ChatPage() {
 
     setIsLoading(true);
 
-    const historyForFlow: HistoryMessage[] = updatedMessagesWithUser // Use messages up to user's latest
-      .filter(msg => msg.id !== aiPlaceholderMessageId) // Exclude placeholder
-      .filter(msg => (typeof msg.text === 'string' && msg.text.trim() !== "") || msg.media) 
+    const historyForApi = updatedMessagesWithUser
+      .filter(msg => msg.id !== aiPlaceholderMessageId) // Exclude the current AI placeholder
+      .filter(msg => (typeof msg.text === 'string' && msg.text.trim() !== "") || msg.media)
       .map(msg => {
-        const parts: HistoryMessage['parts'] = [];
+        const parts: any[] = [];
         if (typeof msg.text === 'string' && msg.text.trim()) {
           parts.push({ text: msg.text });
         }
         if (msg.media?.dataUri) {
           const base64Data = msg.media.dataUri.split(',')[1];
           if (base64Data) {
-            parts.push({ inlineData: { mimeType: msg.media.type, data: base64Data } });
+            parts.push({ inline_data: { mime_type: msg.media.type, data: base64Data } });
           }
         }
         return {
@@ -237,74 +242,107 @@ export default function ChatPage() {
       .filter(content => content.parts.length > 0);
 
 
+    // Construct the final contents array including the current user message
+    const finalContentsForApi = [...historyForApi];
+    // The userMessage parts are already included via updatedMessagesWithUser for historyForApi.
+    // If historyForApi was based on tempMessagesForRequestSetup, we'd add userMessage parts here.
+    // But since it's based on updatedMessagesWithUser, it's already there.
+
+    const requestBody = {
+      contents: finalContentsForApi,
+      // TODO: Consider adding generationConfig and safetySettings if needed
+    };
+
     let accumulatedResponse = "";
     let finalAiMessageText: string | React.ReactNode = "";
-    let fullResponseFromFlow = "";
-
 
     try {
-      // Call the exported async generator server action
-      const clientStream = generateChatResponseFlow({
-        prompt: messageText,
-        history: historyForFlow,
-        media: mediaPayload ? { name: mediaPayload.name, type: mediaPayload.type, dataUri: mediaPayload.dataUri } : undefined,
-      });
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:streamGenerateContent?key=${apiKey}&alt=sse`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+        }
+      );
 
-      for await (const chunk of clientStream) {
-        if (chunk.finalClientResponse !== undefined) { // Check for our special final chunk
-          fullResponseFromFlow = chunk.finalClientResponse.fullResponse || accumulatedResponse;
-          if (chunk.finalClientResponse.error && !fullResponseFromFlow) {
-             finalAiMessageText = (
-                <div className="text-destructive">
-                  <AlertTriangle className="inline-block mr-2 h-4 w-4" />
-                  Error from flow: {chunk.finalClientResponse.error}
-                </div>
-             );
-             toast({ title: "Flow Error", description: chunk.finalClientResponse.error, variant: "destructive" });
+      if (!response.ok || !response.body) {
+        const errorData = await response.json().catch(() => ({ error: { message: "Unknown API error" } }));
+        const apiErrorMessage = errorData.error?.message || `API request failed with status ${response.status}`;
+        console.error("API Error (non-ok response):", apiErrorMessage);
+        finalAiMessageText = <div className="text-destructive"><AlertTriangle className="inline-block mr-2 h-4 w-4" />Error: {apiErrorMessage}</div>;
+        toast({ title: "API Error", description: apiErrorMessage, variant: "destructive" });
+      } else {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const jsonString = line.substring(6);
+                const chunkData = JSON.parse(jsonString);
+
+                if (chunkData.error) {
+                  console.error("Error in stream from API:", chunkData.error.message);
+                  finalAiMessageText = <div className="text-destructive"><AlertTriangle className="inline-block mr-2 h-4 w-4" />Stream Error: {chunkData.error.message}</div>;
+                  toast({ title: "Stream Error", description: chunkData.error.message, variant: "destructive" });
+                  // Update UI with this error
+                  setCurrentMessages(prevMsgs =>
+                    prevMsgs.map(msg =>
+                      msg.id === aiPlaceholderMessageId
+                        ? { ...msg, text: finalAiMessageText, isStreaming: false }
+                        : msg
+                    )
+                  );
+                  setIsLoading(false);
+                  return; // Stop processing on stream error
+                }
+
+                if (chunkData.candidates?.[0]?.content?.parts?.[0]?.text) {
+                  accumulatedResponse += chunkData.candidates[0].content.parts[0].text;
+                  finalAiMessageText = accumulatedResponse;
+                  setCurrentMessages(prevMsgs =>
+                    prevMsgs.map(msg =>
+                      msg.id === aiPlaceholderMessageId
+                        ? { ...msg, text: accumulatedResponse, isStreaming: true }
+                        : msg
+                    ));
+                }
+              } catch (e) {
+                // This might happen if a non-JSON line is processed, or malformed JSON
+                console.warn("Error parsing stream chunk or non-JSON line:", e, "Chunk:", line);
+              }
+            }
           }
-          break; // Exit loop after processing final response chunk
         }
-
-        if (chunk.error) {
-          console.error("Error from chat flow stream:", chunk.error);
-          finalAiMessageText = (
-            <div className="text-destructive">
-              <AlertTriangle className="inline-block mr-2 h-4 w-4" />
-              Error: {chunk.error}
-            </div>
-          );
-          toast({ title: "Flow Error", description: chunk.error, variant: "destructive" });
-          // Do not break here if error is part of stream, finalClientResponse might still come with aggregated data
+        // Process any remaining data in the buffer
+        if (buffer.startsWith('data: ')) {
+          try {
+            const jsonString = buffer.substring(6);
+            const chunkData = JSON.parse(jsonString);
+             if (chunkData.candidates?.[0]?.content?.parts?.[0]?.text) {
+                accumulatedResponse += chunkData.candidates[0].content.parts[0].text;
+             }
+          } catch (e) {
+            console.warn("Error parsing final buffer chunk:", e, "Chunk:", buffer);
+          }
         }
-        if (chunk.toolEvent) {
-           setCurrentMessages(prevMsgs =>
-            prevMsgs.map(msg =>
-              msg.id === aiPlaceholderMessageId
-                ? { ...msg, text: `${accumulatedResponse}\n\n*${chunk.toolEvent?.message || chunk.toolEvent?.toolName}...*`, isStreaming: true }
-                : msg
-            ));
-        }
-        if (chunk.textChunk) {
-          accumulatedResponse += chunk.textChunk;
-          finalAiMessageText = accumulatedResponse; // Live update with accumulated text
-          setCurrentMessages(prevMsgs =>
-            prevMsgs.map(msg =>
-              msg.id === aiPlaceholderMessageId
-                ? { ...msg, text: accumulatedResponse, isStreaming: true }
-                : msg
-            ));
+        finalAiMessageText = accumulatedResponse;
+        if (typeof finalAiMessageText === 'string' && finalAiMessageText.trim() === "") {
+          finalAiMessageText = "No text content in response.";
         }
       }
-      
-      // Use fullResponseFromFlow if available, otherwise stick with accumulatedResponse or error display
-      finalAiMessageText = fullResponseFromFlow || (React.isValidElement(finalAiMessageText) ? finalAiMessageText : accumulatedResponse);
-      if (typeof finalAiMessageText === 'string' && finalAiMessageText.trim() === "" && !React.isValidElement(finalAiMessageText)) {
-        finalAiMessageText = "No text content in response.";
-      }
-
-
-    } catch (error) { 
-      console.error("Error in handleSendMessage stream processing:", error);
+    } catch (error) {
+      console.error("Error in handleSendMessage:", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred while processing stream.";
       finalAiMessageText = (
           <div className="text-destructive">
@@ -336,7 +374,7 @@ export default function ChatPage() {
   const handleNewChat = (temporary: boolean) => {
     if (isLoading) return "";
     if (editingChatSessionId) {
-      setEditingChatSessionId(null); 
+      setEditingChatSessionId(null);
     }
 
     const newChatId = uuidv4();
@@ -352,29 +390,29 @@ export default function ChatPage() {
     setActiveChatId(newChatId);
     setCurrentMessages([]);
     setIsTemporaryChat(temporary);
-    if (isMobile) toggleSidebar();
+    if (isMobile && sidebarState === 'expanded') toggleSidebar(); // Close sidebar on mobile if open
     return newChatId;
   };
 
   const handleSelectChat = (sessionId: string) => {
-    if (isLoading || editingChatSessionId === sessionId) return; // Prevent selection if editing current or loading
-    if (editingChatSessionId && editingChatSessionId !== sessionId) { 
+    if (isLoading || editingChatSessionId === sessionId) return;
+    if (editingChatSessionId && editingChatSessionId !== sessionId) {
       setEditingChatSessionId(null);
     }
 
     const selectedChat = chatSessions.find(session => session.id === sessionId);
     if (selectedChat) {
       setActiveChatId(sessionId);
-      setCurrentMessages(selectedChat.messages.map(m => ({...m, isStreaming: false }))); 
+      setCurrentMessages(selectedChat.messages.map(m => ({...m, isStreaming: false })));
       setIsTemporaryChat(selectedChat.isTemporary || false);
-      if (isMobile) toggleSidebar();
+      if (isMobile && sidebarState === 'expanded') toggleSidebar();
     }
   };
 
   const handleDeleteChat = (sessionId: string) => {
     if (isLoading) return;
      if (editingChatSessionId === sessionId) {
-      setEditingChatSessionId(null); 
+      setEditingChatSessionId(null);
     }
 
     setChatSessions(prev => prev.filter(session => session.id !== sessionId));
@@ -383,35 +421,32 @@ export default function ChatPage() {
       if (remainingSessions.length > 0) {
         handleSelectChat(remainingSessions[0].id);
       } else {
-        handleNewChat(false); 
+        handleNewChat(false);
       }
     }
   };
 
   const handleTemporaryChatToggle = (checked: boolean) => {
     if (isLoading || editingChatSessionId) return;
-    
+
     setIsTemporaryChat(checked);
     if (activeChatId) {
         const currentActiveChat = chatSessions.find(c => c.id === activeChatId);
         if(currentActiveChat && currentActiveChat.messages.length === 0) {
             setChatSessions(prev => prev.map(s => s.id === activeChatId ? {...s, isTemporary: checked, lastUpdatedAt: Date.now()} : s));
         } else if (checked) {
-            // If current chat has messages, or no active chat, start a new temporary one
             handleNewChat(true);
         } else {
-            // If toggling off temporary for an existing chat (even with messages)
              setChatSessions(prev => prev.map(s => s.id === activeChatId ? {...s, isTemporary: false, lastUpdatedAt: Date.now()} : s));
         }
     } else {
-        // No active chat, start new one with the specified temporary state
         handleNewChat(checked);
     }
   };
 
   const startEditingTitle = (sessionId: string) => {
     const session = chatSessions.find(s => s.id === sessionId);
-    if (session && !session.isTemporary) { // Only allow editing non-temporary chats
+    if (session && !session.isTemporary) {
       setEditingChatSessionId(sessionId);
       setTitleInputValue(session.title === "New Chat" && session.messages.length === 0 ? "" : session.title);
     } else if (session && session.isTemporary) {
@@ -425,7 +460,6 @@ export default function ChatPage() {
       toast({ title: "Error", description: "Chat title cannot be empty.", variant: "destructive" });
       const originalSession = chatSessions.find(s => s.id === sessionId);
       if (originalSession) setTitleInputValue(originalSession.title === "New Chat" && originalSession.messages.length === 0 ? "" : originalSession.title);
-      // Do not set editingChatSessionId to null here, let blur or escape handle it
       return;
     }
     setChatSessions(prevSessions =>
@@ -439,11 +473,11 @@ export default function ChatPage() {
   const cancelEditTitle = () => {
     const session = chatSessions.find(s => s.id === editingChatSessionId);
     if (session) {
-        setTitleInputValue(session.title); 
+        setTitleInputValue(session.title);
     }
     setEditingChatSessionId(null);
   };
-  
+
   const handleThemeToggle = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
@@ -463,7 +497,7 @@ export default function ChatPage() {
       <ChatHistorySidebar
         chatSessions={chatSessions}
         activeChatId={activeChatId}
-        onNewChat={() => handleNewChat(isTemporaryChat)} 
+        onNewChat={() => handleNewChat(isTemporaryChat)}
         onSelectChat={handleSelectChat}
         onDeleteChat={handleDeleteChat}
         isLoading={isLoading || isCurrentlyEditingThisTitle}
@@ -473,10 +507,10 @@ export default function ChatPage() {
         <div className="flex h-screen w-full flex-col items-center bg-background text-foreground">
           <header className="w-full flex justify-between items-center p-3 md:p-4 border-b border-border sticky top-0 bg-background z-10">
             <div className="flex items-center gap-2 flex-grow min-w-0">
-              <Button variant="ghost" size="icon" onClick={toggleSidebar} className="md:hidden shrink-0" aria-label="Toggle History" disabled={isLoading || isCurrentlyEditingThisTitle}>
-                <PasquaIcon className="h-6 w-6 text-primary" />
+               <Button variant="ghost" size="icon" onClick={toggleSidebar} className="md:hidden shrink-0" aria-label="Toggle History" disabled={isLoading || isCurrentlyEditingThisTitle}>
+                <PanelLeft className="h-6 w-6 text-primary" />
               </Button>
-              
+
               <div className="flex items-center gap-1 flex-grow min-w-0">
                 {isCurrentlyEditingThisTitle && activeChatId ? (
                   <Input
@@ -494,11 +528,9 @@ export default function ChatPage() {
                       }
                     }}
                     onBlur={() => {
-                          // Only save on blur if there's content and it's the active edit
                           if (editingChatSessionId === activeChatId && titleInputValue.trim()) {
                              saveChatTitle(activeChatId);
-                          } else if (editingChatSessionId === activeChatId) { 
-                            // If blurred and empty, cancel edit to revert to original title
+                          } else if (editingChatSessionId === activeChatId) {
                             cancelEditTitle();
                           }
                     }}
@@ -543,7 +575,7 @@ export default function ChatPage() {
                    <DropdownMenuItem onClick={handleThemeToggle} disabled={isLoading || isCurrentlyEditingThisTitle}>
                     <ThemeToggleItemContent />
                   </DropdownMenuItem>
-                  {activeChatId && chatSessions.find(s => s.id === activeChatId && !s.isTemporary && s.messages.length > 0 ) && ( 
+                  {activeChatId && chatSessions.find(s => s.id === activeChatId && !s.isTemporary && s.messages.length > 0 ) && (
                      <DropdownMenuItem
                         onClick={() => activeChatId && handleDeleteChat(activeChatId)}
                         className="text-destructive"
@@ -572,7 +604,7 @@ export default function ChatPage() {
                         variant="outline"
                         className="h-auto p-4 text-left justify-start bg-card hover:bg-accent/50"
                         onClick={() => handleSendMessage(`${prompt.title} ${prompt.description}`)}
-                        disabled={isLoading}
+                        disabled={isLoading || !apiKey}
                       >
                         <prompt.icon className="h-5 w-5 mr-3 text-primary shrink-0" />
                         <div>
@@ -589,19 +621,19 @@ export default function ChatPage() {
               ))}
             </ScrollArea>
             <div className="mt-auto px-2 md:px-0 pt-2">
-                {!apiKey && ( 
+                {!apiKey && (
                 <Alert variant="destructive" className="w-full mb-3">
                     <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>API Key Information</AlertTitle>
+                    <AlertTitle>API Key Required</AlertTitle>
                     <AlertDescription>
-                    The app is configured to use its server-side API key for Genkit. You can still set a key here for reference or potential future client-side features via <Settings className="inline-block h-4 w-4 mx-1" />.
+                    Please set your Gemini API key to enable chat functionality. You can set it using the <Settings className="inline-block h-4 w-4 mx-1" /> icon in the header.
                     </AlertDescription>
                 </Alert>
                 )}
-              <ChatInput 
-                onSendMessage={handleSendMessage} 
-                isLoading={isLoading} 
-                disabled={isLoading || isCurrentlyEditingThisTitle} 
+              <ChatInput
+                onSendMessage={handleSendMessage}
+                isLoading={isLoading}
+                disabled={isLoading || !apiKey || isCurrentlyEditingThisTitle}
               />
             </div>
           </div>
@@ -617,3 +649,4 @@ export default function ChatPage() {
   );
 }
 
+    
