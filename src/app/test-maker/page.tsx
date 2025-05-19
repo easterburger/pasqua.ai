@@ -113,7 +113,7 @@ export default function TestMakerPage() {
   };
 
   return (
-    <div className="flex flex-col items-center min-h-screen bg-background text-foreground p-4 md:p-8">
+    <div className="w-full flex flex-col items-center min-h-screen bg-background text-foreground p-4 md:p-8">
       <header className="w-full max-w-3xl mb-8 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link href="/" passHref>
