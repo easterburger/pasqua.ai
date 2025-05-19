@@ -18,9 +18,10 @@ const processMessageContent = (textContent: string | React.ReactNode): React.Rea
     if (React.isValidElement(textContent)) return [textContent]; // Already a valid React element
     if (Array.isArray(textContent)) return textContent; // Already an array of nodes
     if (typeof textContent === 'object' && textContent !== null) {
-      return [<span key="error_reload">{"[Error message: Content cannot be displayed after reload]"}</span>];
+      // This case handles objects that were likely React elements but got stringified/parsed from localStorage
+      return [<span key="error_reload" className="italic text-muted-foreground">{"[Content may not display correctly after reload. Please try regenerating.]"}</span>];
     }
-    return textContent ? [textContent] : []; // Fallback for other types or empty
+    return textContent ? [String(textContent)] : []; // Fallback for other types or empty
   }
 
   const elements: React.ReactNode[] = [];
@@ -55,13 +56,9 @@ const processMessageContent = (textContent: string | React.ReactNode): React.Rea
     line = line.replace(/^(\s*-\s+|\s*\*\s*|\s*>\s*)/, ''); // remove list/quote markers at line start
 
     if (line.trim() === "") {
-      // If the line is empty and the previous element was simple text, add a <br> to create paragraph breaks.
-      // Avoid adding <br> if the previous element was already a block-level (like a heading or hr) or another <br>.
       if (elements.length > 0) {
         const lastElement = elements[elements.length - 1];
         if (typeof lastElement === 'string' || (React.isValidElement(lastElement) && lastElement.type === 'br')) {
-          // If the last element was text or already a br, we might want a single br for an empty line.
-          // This logic can be fine-tuned. For now, let's add one <br> for an empty line if it's not the first.
            if (elements.length > 0 && ! (React.isValidElement(lastElement) && (lastElement.type === 'hr' || (typeof lastElement.props?.className === 'string' && lastElement.props.className.includes('block')) ) ) ) {
              elements.push(<br key={`break-empty-${i}`} />);
            }
@@ -72,7 +69,6 @@ const processMessageContent = (textContent: string | React.ReactNode): React.Rea
     
     elements.push(line);
 
-    // Add <br /> if it's not the last line AND the next line isn't a heading or hr
     if (i < lines.length - 1) {
         const nextLine = lines[i+1];
         if (!nextLine.match(/^#{1,3}\s/) && !nextLine.match(/^(\s*([*\-_])\s*){3,}\s*$/) && nextLine.trim() !== "") {
@@ -80,7 +76,7 @@ const processMessageContent = (textContent: string | React.ReactNode): React.Rea
         }
     }
   }
-  return elements.filter(el => el !== null && el !== undefined); // Filter out any potential nulls
+  return elements.filter(el => el !== null && el !== undefined); 
 };
 
 
@@ -88,9 +84,8 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
   const isUser = sender === "user";
   const { toast } = useToast();
 
-  // Process text only when not streaming. During streaming, raw text is shown.
-  // `displayedText` will be React.ReactNode[] after processing.
-  const displayedText = !isStreaming ? processMessageContent(text) : null;
+  const displayedText = !isStreaming ? processMessageContent(text) : (typeof text === 'string' ? text : "");
+
 
   const handleDownload = () => {
     if (media) {
@@ -104,9 +99,10 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
   };
 
   const handleCopy = async () => {
-    if (typeof text === 'string') { 
+    const textToCopy = typeof text === 'string' ? text : (React.isValidElement(text) ? (text.props.children as string) : '');
+    if (textToCopy) { 
       try {
-        await navigator.clipboard.writeText(text);
+        await navigator.clipboard.writeText(textToCopy);
         toast({
           title: "Copied to clipboard!",
         });
@@ -129,7 +125,7 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
       )}
     >
       {!isUser && (
-        <Avatar className="h-8 w-8 border border-border shadow-sm shrink-0 self-start mt-1"> {/* Avatar aligns top */}
+        <Avatar className="h-8 w-8 border border-border shadow-sm shrink-0 self-start mt-1">
           <AvatarFallback className="bg-transparent text-primary">
             <PasquaIcon className="h-5 w-5" />
           </AvatarFallback>
@@ -137,7 +133,6 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
       )}
       
       {isUser ? (
-        // User message styling
         <div
           className={cn(
             "relative max-w-[80%] rounded-lg px-4 py-3 shadow-md break-words flex flex-col gap-2",
@@ -178,11 +173,10 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
               )}
             </div>
           )}
-          {/* User text content */}
           {(typeof text === 'string' && text.trim()) || React.isValidElement(text) || (Array.isArray(text) && text.length >0) ? (
-            <div>{text}</div> // User raw text
+            <div>{text}</div>
           ) : null}
-           {!text && !media && ( // Covers both user and AI for empty if no text and no media
+           {!text && !media && (
             <div className="italic opacity-80">(empty message)</div>
           )}
         </div>
@@ -222,24 +216,21 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
               )}
             </div>
           )}
-          {/* AI text content */}
-          <div className="text-foreground break-words w-full leading-relaxed">
+          <div className="text-foreground break-words w-full leading-relaxed mt-1"> {/* Added mt-1 for spacing below icon */}
             {isStreaming ? (
               <>
-                {text} 
+                {displayedText} {/* Show processed text even while streaming if possible, or raw 'text' */}
                 <span className="inline-block animate-pulse">▌</span>
               </>
             ) : (
-              displayedText // This is React.ReactNode[]
+              displayedText // This is React.ReactNode[] from processMessageContent
             )}
           </div>
 
-          {/* Fallback for truly empty messages (no text, no media) */}
-          {!isStreaming && !media && (!text || (typeof text === 'string' && text.trim() === '')) && (!displayedText || displayedText.length === 0) && (
+          {!isStreaming && !media && (!text || (typeof text === 'string' && text.trim() === '')) && (!displayedText || (Array.isArray(displayedText) && displayedText.length === 0)) && (
             <div className="italic text-muted-foreground">(empty message)</div>
           )}
           
-          {/* Still show cursor if streaming, no text, no media */}
           {isStreaming && !media && (!text || (typeof text === 'string' && text.trim() === '')) && (
              <div className="text-foreground"><span className="inline-block animate-pulse">▌</span></div>
           )}
@@ -260,7 +251,7 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
       )}
 
       {isUser && (
-        <Avatar className="h-8 w-8 border border-border shadow-sm shrink-0 self-start mt-1"> {/* User avatar also aligns top */}
+        <Avatar className="h-8 w-8 border border-border shadow-sm shrink-0 self-start mt-1">
           <AvatarFallback className="bg-primary text-primary-foreground"> 
             <User className="h-5 w-5" />
           </AvatarFallback>
@@ -269,3 +260,4 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
     </div>
   );
 }
+
