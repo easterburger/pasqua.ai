@@ -32,22 +32,23 @@ const GenerateChatResponseInputSchema = z.object({
 });
 export type GenerateChatResponseInput = z.infer<typeof GenerateChatResponseInputSchema>;
 
-export const generateChatResponseFlow = ai.defineFlow(
+// Define the core Genkit flow (internal)
+const _coreChatResponseFlow = ai.defineFlow(
   {
-    name: 'generateChatResponseFlow',
+    name: '_coreChatResponseFlow', // Internal name for Genkit registry
     inputSchema: GenerateChatResponseInputSchema,
     outputSchema: z.object({ fullResponse: z.string().describe("The full, accumulated text response from the AI.") }),
-    streamSchema: z.object({ // Describes the structure of each yielded chunk in the stream
+    streamSchema: z.object({ // Describes chunks from this core flow
       textChunk: z.string().optional().describe("A chunk of text from the AI's response."),
       error: z.string().optional().describe("An error message, if an error occurred during streaming."),
       toolEvent: z.object({
         type: z.enum(['tool_code_request', 'tool_code_result']),
         toolName: z.string(),
         message: z.string().optional(),
-      }).optional().describe("An event related to tool usage, e.g., indicating a tool is being called.")
+      }).optional().describe("An event related to tool usage.")
     }),
   },
-  async function* (input) { // This is an async generator function
+  async function* (input: GenerateChatResponseInput) {
     let currentPromptParts: Array<{text?: string; inlineData?: {mimeType: string; data: string}}> = [{ text: input.prompt }];
 
     if (input.media?.dataUri && input.media.type) {
@@ -60,43 +61,33 @@ export const generateChatResponseFlow = ai.defineFlow(
     }
 
     const llmHistory: HistoryMessage[] = input.history || [];
-
     const systemInstruction = "You are a helpful AI assistant. If a URL is mentioned by the user, use the 'fetchWebsiteContentTool' to get its content and use that content to answer the question. If you use the tool, briefly inform the user before you display the result (e.g., 'Fetching content from [URL]... then after the tool responds, provide your answer based on the content.'). If the tool returns an error, inform the user about the error and proceed without the content if possible, or state that you cannot complete the request due to the error.";
-
     let accumulatedResponse = "";
+
     try {
-      const { stream, response: fullResponsePromise } = ai.generateStream({
-        model: 'gemini-1.5-flash-latest', // Or your configured default model
+      const { stream: llmStream, response: fullResponsePromise } = ai.generateStream({
+        model: 'gemini-1.5-flash-latest',
         prompt: { role: 'user', parts: currentPromptParts },
         history: llmHistory,
         tools: [fetchWebsiteContentTool],
         system: systemInstruction,
       });
 
-      for await (const chunk of stream) {
+      for await (const chunk of llmStream) {
         if (chunk.text) {
           accumulatedResponse += chunk.text;
           yield { textChunk: chunk.text };
         }
         if (chunk.toolRequests && chunk.toolRequests.length > 0) {
-          // Inform client that a tool is being called
-          // For simplicity, just taking the first tool request if multiple (though rare for this setup)
           yield { toolEvent: { type: 'tool_code_request', toolName: chunk.toolRequests[0].name, message: `Fetching content from ${chunk.toolRequests[0].input.url}...` } };
         }
-         // Note: Genkit handles executing the tool and providing its response back to the LLM.
-         // We don't typically see `toolResponses` here unless we're manually orchestrating.
-         // The LLM will then generate further text based on the tool's output.
       }
 
-      // Awaiting fullResponsePromise ensures all tool calls and subsequent LLM turns are complete.
       const finalLlmResponse = await fullResponsePromise;
       const finalResponseText = finalLlmResponse.text || "";
 
-      // It's possible that the stream already yielded all text.
-      // This check ensures any final text not caught by the loop is returned.
-      // Or if the entire response was a single non-streamed block (e.g., after a tool call if model streams only initial parts).
       if (finalResponseText && finalResponseText !== accumulatedResponse) {
-        if (accumulatedResponse.length > 0 && finalResponseText.startsWith(accumulatedResponse)) {
+         if (accumulatedResponse.length > 0 && finalResponseText.startsWith(accumulatedResponse)) {
            const remainingText = finalResponseText.substring(accumulatedResponse.length);
            if (remainingText.length > 0) {
              yield { textChunk: remainingText };
@@ -109,11 +100,46 @@ export const generateChatResponseFlow = ai.defineFlow(
       }
       return { fullResponse: accumulatedResponse };
     } catch (e: any) {
-      console.error("Error in generateChatResponseFlow stream processing:", e);
+      console.error("Error in _coreChatResponseFlow stream processing:", e);
       const errorMessage = e.message || "An error occurred while processing the stream.";
       yield { error: errorMessage };
-      // Return what has been accumulated, or an empty string if nothing.
       return { fullResponse: accumulatedResponse || `[Error: ${errorMessage}]` };
     }
   }
 );
+
+// Export an async generator server action for the client
+// This is what the client will import and call.
+export async function* generateChatResponseFlow(input: GenerateChatResponseInput) {
+  const genkitStream = _coreChatResponseFlow.stream(input);
+  let finalClientResponseObject: { fullResponse?: string; error?: string } = {};
+
+  try {
+    for await (const chunk of genkitStream) {
+      // Yield regular chunks directly to the client
+      yield chunk; // These are { textChunk?: ..., error?: ..., toolEvent?: ... }
+    }
+
+    // After the stream is exhausted, get the final output from the Genkit flow
+    const output = await genkitStream.output();
+    if (output) {
+      finalClientResponseObject.fullResponse = output.fullResponse;
+    } else {
+      // This case might occur if the flow itself had an issue resolving its final output
+      // or if it was prematurely ended without a return.
+      // The accumulated text during streaming is often the best fallback.
+      // However, the individual chunks should have already been yielded.
+      // We'll primarily rely on the output for the 'official' full response.
+      finalClientResponseObject.error = "Flow completed without a final output structure.";
+    }
+  } catch (e: any) {
+    console.error("Error in generateChatResponseFlow (wrapper) stream processing:", e);
+    const errorMessage = e.message || "An error occurred in the chat response wrapper.";
+    yield { error: errorMessage }; // Yield an error chunk
+    finalClientResponseObject.error = errorMessage;
+  }
+  
+  // Yield a special final chunk that contains the aggregated full response or any final error.
+  // The client will look for `finalClientResponse` property to identify this.
+  yield { finalClientResponse: finalClientResponseObject };
+}
