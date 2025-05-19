@@ -44,7 +44,7 @@ export default function SignupPage() {
   
   if (authLoading && !currentUser) {
     return (
-        <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="w-full flex items-center justify-center min-h-screen bg-background">
             <Loader2 className="h-12 w-12 animate-spin text-primary" />
         </div>
     );
@@ -52,7 +52,7 @@ export default function SignupPage() {
   if(currentUser) return null; // Avoid rendering form if user object becomes available during render
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4">
+    <div className="w-full flex flex-col items-center justify-center min-h-screen bg-background p-4">
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4">
