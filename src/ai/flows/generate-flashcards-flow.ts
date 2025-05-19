@@ -1,3 +1,4 @@
+
 // Use server directive is required for Genkit flows.
 'use server';
 
@@ -13,7 +14,7 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-export const FlashcardSchema = z.object({
+const FlashcardSchema = z.object({
   front: z.string().describe('The question, term, or concept for the front of the flashcard.'),
   back: z.string().describe('The answer, definition, or explanation for the back of the flashcard.'),
 });
@@ -68,3 +69,4 @@ const generateFlashcardsFlow = ai.defineFlow(
     return output;
   }
 );
+
