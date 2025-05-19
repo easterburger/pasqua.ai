@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -8,35 +9,36 @@ body {
 
 @layer base {
   :root {
+    /* Light Theme (inspired by ChatGPT light mode, adapted for Pasqua) */
     --background: 0 0% 100%; /* White */
-    --foreground: 240 10% 3.9%; /* Near Black/Dark Blue */
+    --foreground: 240 10% 3.9%; /* Near Black */
 
-    --card: 220 20% 97%; /* Very Light Cool Gray for chat area */
+    --card: 0 0% 96.5%; /* Slightly off-white for cards/AI messages */
     --card-foreground: 240 10% 3.9%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 3.9%;
 
-    --primary: 260 70% 55%; /* Vibrant Violet */
-    --primary-foreground: 0 0% 100%; /* White text on primary */
+    --primary: 260 70% 55%; /* Vibrant Violet (Pasqua brand) */
+    --primary-foreground: 0 0% 100%; 
 
-    --secondary: 220 60% 95%; /* Light Blue/Gray for AI messages */
-    --secondary-foreground: 220 25% 30%; /* Darker text for AI messages */
+    --secondary: 220 10% 90%; /* Lighter gray for secondary elements */
+    --secondary-foreground: 240 10% 3.9%;
 
-    --muted: 0 0% 94%;
-    --muted-foreground: 240 5% 45%;
+    --muted: 0 0% 94%; /* Muted backgrounds */
+    --muted-foreground: 240 5% 45%; /* Muted text */
 
-    --accent: 260 70% 96%; /* Light Violet for User messages */
-    --accent-foreground: 260 40% 35%; /* Darker violet text for user messages */
+    --accent: 260 70% 96%; /* Light Violet for user messages/accents */
+    --accent-foreground: 260 50% 45%; /* Darker violet text on accent */
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 88%; /* Softer border for light mode */
-    --input: 0 0% 88%;
-    --ring: 260 70% 50%; /* Ring color related to primary */
+    --border: 0 0% 89.8%; /* Light gray border */
+    --input: 0 0% 92.3%; /* Input background */
+    --ring: 260 70% 50%; 
 
-    --radius: 0.5rem;
+    --radius: 0.75rem; /* Slightly more rounded like ChatGPT */
 
     /* Chart colors */
     --chart-1: 12 76% 61%;
@@ -45,62 +47,63 @@ body {
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
 
-    /* Sidebar colors (can keep default or adjust if sidebar is used later) */
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Sidebar - Light */
+    --sidebar-background: 0 0% 98%; /* Very light gray, almost white */
+    --sidebar-foreground: 240 8% 25%; 
+    --sidebar-primary: 260 70% 55%; /* Pasqua Primary */
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 92%; /* Active/hover item background */
+    --sidebar-accent-foreground: 240 10% 3.9%;
+    --sidebar-border: 0 0% 89.8%;
+    --sidebar-ring: 260 70% 50%;
   }
 
   .dark {
-    --background: 220 15% 12%; /* Dark Slate Blue-Gray */
-    --foreground: 210 40% 98%; /* Light Cool Gray */
+    /* Dark Theme (inspired by ChatGPT dark mode) */
+    --background: 224 71% 4%; /* Very dark blue-gray, almost black */
+    --foreground: 210 40% 98%; /* Light gray / Off-white */
 
-    --card: 220 15% 18%; /* Chat area background - slightly lighter slate */
-    --card-foreground: 210 40% 98%;
+    --card: 222 47% 11%; /* Dark gray for chat bubbles, input areas */
+    --card-foreground: 210 40% 96%;
 
-    --popover: 220 15% 18%;
+    --popover: 224 71% 4%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 260 70% 65%; /* More vibrant Violet - for buttons, icons */
-    --primary-foreground: 260 70% 96%; /* Light text on primary */
+    --primary: 260 75% 65%; /* Brighter Violet for dark mode */
+    --primary-foreground: 0 0% 100%; 
 
-    --secondary: 220 15% 22%; /* AI messages background - distinct dark gray */
-    --secondary-foreground: 210 40% 95%;
+    --secondary: 217 33% 17%; /* Slightly lighter dark gray */
+    --secondary-foreground: 210 40% 90%;
 
-    --muted: 220 15% 25%;
-    --muted-foreground: 210 20% 65%; /* For placeholder text, info messages */
+    --muted: 222 47% 11%; /* Same as card for muted elements like disabled state */
+    --muted-foreground: 210 20% 65%; 
 
-    --accent: 220 15% 28%; /* User messages background - slightly lighter/different dark gray */
-    --accent-foreground: 210 40% 98%;
+    --accent: 260 75% 55%; /* User messages / active elements - can be similar to primary or distinct */
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 62.8% 40%; /* Adjusted for better visibility on dark bg */
+    --destructive: 0 62.8% 45%; 
     --destructive-foreground: 0 0% 98%;
 
-    --border: 220 15% 30%; /* Subtle borders */
-    --input: 220 15% 25%; /* Background of input fields if they had their own */
-    --ring: 260 70% 55%; /* Focus rings */
+    --border: 217 33% 22%; /* Subtle border */
+    --input: 222 47% 11%;  /* Same as card for input background */
+    --ring: 260 75% 60%; 
     
-    /* Chart colors */
+    /* Chart colors - Dark */
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
 
-    /* Sidebar colors */
-    --sidebar-background: 220 15% 15%; /* Darker sidebar */
+    /* Sidebar - Dark */
+    --sidebar-background: 220 25% 8%; /* Darker than main background, slightly distinct */
     --sidebar-foreground: 210 30% 85%;
-    --sidebar-primary: 260 70% 60%;
-    --sidebar-primary-foreground: 260 70% 95%;
-    --sidebar-accent: 220 15% 25%;
-    --sidebar-accent-foreground: 210 30% 90%;
-    --sidebar-border: 220 15% 30%;
-    --sidebar-ring: 260 70% 55%;
+    --sidebar-primary: 260 75% 65%; /* Pasqua Primary for Dark Mode */
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 47% 13%; /* Active/hover item background */
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217 33% 17%;
+    --sidebar-ring: 260 75% 60%;
   }
 }
 

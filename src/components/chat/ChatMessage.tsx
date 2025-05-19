@@ -1,18 +1,14 @@
+
 "use client";
 
+import type { ChatMessage } from "@/lib/types"; // Updated import
 import { cn } from "@/lib/utils";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Bot, User } from "lucide-react";
-import { PasquaIcon } from "@/components/icons/PasquaIcon";
 
-export interface ChatMessageProps {
-  id: string;
-  sender: "user" | "ai";
-  text: string | React.ReactNode; // Allow ReactNode for potential markdown rendering
-  isStreaming?: boolean;
-}
+// Removed internal ChatMessageProps, will use ChatMessage from lib/types
 
-export function ChatMessage({ sender, text, isStreaming }: ChatMessageProps) {
+export function ChatMessage({ sender, text, isStreaming }: ChatMessage) { // Updated prop type
   const isUser = sender === "user";
 
   return (
@@ -24,8 +20,6 @@ export function ChatMessage({ sender, text, isStreaming }: ChatMessageProps) {
     >
       {!isUser && (
         <Avatar className="h-8 w-8 border border-border shadow-sm">
-          {/* Placeholder for AI avatar image if desired */}
-          {/* <AvatarImage src="https://placehold.co/40x40.png" alt="AI" /> */}
           <AvatarFallback className="bg-secondary text-secondary-foreground">
             <Bot className="h-5 w-5" />
           </AvatarFallback>
@@ -33,19 +27,17 @@ export function ChatMessage({ sender, text, isStreaming }: ChatMessageProps) {
       )}
       <div
         className={cn(
-          "max-w-[70%] rounded-lg px-4 py-3 shadow-md",
+          "max-w-[80%] rounded-lg px-4 py-3 shadow-md break-words", // Added break-words
           isUser
-            ? "bg-accent text-accent-foreground rounded-br-none"
-            : "bg-secondary text-secondary-foreground rounded-bl-none"
+            ? "bg-primary text-primary-foreground rounded-br-none" // Changed user message bg to primary
+            : "bg-card text-card-foreground rounded-bl-none" // Changed AI message bg to card
         )}
       >
         {typeof text === 'string' && isStreaming ? `${text}▌` : text}
       </div>
       {isUser && (
         <Avatar className="h-8 w-8 border border-border shadow-sm">
-           {/* Placeholder for User avatar image if desired */}
-          {/* <AvatarImage src="https://placehold.co/40x40.png" alt="User" /> */}
-          <AvatarFallback className="bg-primary text-primary-foreground">
+          <AvatarFallback className="bg-accent text-accent-foreground"> {/* Changed user avatar bg to accent */}
             <User className="h-5 w-5" />
           </AvatarFallback>
         </Avatar>
@@ -53,3 +45,4 @@ export function ChatMessage({ sender, text, isStreaming }: ChatMessageProps) {
     </div>
   );
 }
+
