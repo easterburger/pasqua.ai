@@ -29,31 +29,18 @@ import { SidebarInset, useSidebar } from "@/components/ui/sidebar";
 import { ChatHistorySidebar } from "@/components/sidebar/ChatHistorySidebar";
 import { useTheme } from "@/components/theme/theme-provider";
 import { ThemeToggleItemContent } from "@/components/theme/theme-toggle-item-content";
-
-
-interface GeminiPart {
-  text?: string;
-  inlineData?: {
-    mimeType: string;
-    data: string; // Base64 encoded string
-  };
-}
-
-interface GeminiContent {
-  role: 'user' | 'model';
-  parts: GeminiPart[];
-}
+import { generateChatResponseFlow, type HistoryMessage } from "@/ai/flows/generate-chat-response-flow";
 
 const examplePrompts = [
   { title: "Brainstorm ideas", description: "for my new indie game", icon: Lightbulb },
   { title: "Explain a complex topic", description: "like quantum computing in simple terms", icon: Zap },
   { title: "Write a poem", description: "about the beauty of nature", icon: Edit3 },
-  { title: "Summarize this article", description: "and give me the key takeaways", icon: Telescope },
+  { title: "Summarize an article", description: "from a URL you provide", icon: Telescope },
 ];
 
 
 export default function ChatPage() {
-  const [apiKey, setApiKey] = React.useState<string | null>(null);
+  const [apiKey, setApiKey] = React.useState<string | null>(null); // API Key is still managed for potential direct calls or future use
   const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
   const { toast } = useToast();
@@ -73,11 +60,19 @@ export default function ChatPage() {
 
 
   React.useEffect(() => {
+    // API Key check remains, as Genkit flows might require it (depending on auth setup)
+    // or if there are other parts of the app that might use it.
     const storedApiKey = localStorage.getItem(API_KEY_LOCAL_STORAGE_KEY);
     if (storedApiKey) {
       setApiKey(storedApiKey);
     } else {
-      setIsApiKeyDialogOpen(true);
+      // For Genkit flows, API key might be configured server-side via .env
+      // However, keeping this dialog for user awareness or if client-side key use is ever needed.
+      // setIsApiKeyDialogOpen(true); 
+      // If Genkit is fully server-side configured, this dialog might become optional.
+      // For now, let's assume it's still good practice to have it.
+      // If no API key is found and Genkit is server-configured, chat will work.
+      // If Genkit relies on a client-passed key (not typical for Firebase Studio Genkit setup), this is crucial.
     }
 
     const storedSessions = localStorage.getItem(CHAT_SESSIONS_LOCAL_STORAGE_KEY);
@@ -130,9 +125,10 @@ export default function ChatPage() {
 
 
   const handleApiKeySave = (newApiKey: string) => {
-    setApiKey(newApiKey);
+    setApiKey(newApiKey); // Still useful if client-side key use is planned elsewhere or for user reference
     localStorage.setItem(API_KEY_LOCAL_STORAGE_KEY, newApiKey);
     setIsApiKeyDialogOpen(false);
+    toast({ title: "API Key Saved", description: "Your Gemini API key has been saved." });
   };
 
   const updateChatSessionMessages = (sessionId: string, updatedMessages: ChatMessage[], newTitle?: string) => {
@@ -156,15 +152,10 @@ export default function ChatPage() {
 
 
   const handleSendMessage = async (messageText: string, mediaPayload?: ChatMessageMedia) => {
-    if (!apiKey) {
-      toast({
-        title: "API Key Missing",
-        description: "Please set your Gemini API key to send messages.",
-        variant: "destructive",
-      });
-      setIsApiKeyDialogOpen(true);
-      return;
-    }
+    // API Key check might be less critical here if Genkit uses server-side keys
+    // but good for user feedback if some operations still depend on it.
+    // For now, we assume Genkit handles auth and don't gate sending on client-side API key.
+
     if (editingChatSessionId) {
       setEditingChatSessionId(null); 
     }
@@ -182,19 +173,6 @@ export default function ChatPage() {
     } else if (isTemporaryChat && currentActiveChatIsPristineTemporary && currentActiveChatIdForRequest) {
         setChatSessions(prev => prev.map(s => s.id === currentActiveChatIdForRequest ? {...s, isTemporary: false, title: "New Chat", lastUpdatedAt: Date.now()} : s));
         setIsTemporaryChat(false); 
-    }
-
-    const userMessageParts: GeminiPart[] = [];
-    if (messageText) {
-      userMessageParts.push({ text: messageText });
-    }
-    if (mediaPayload) {
-      userMessageParts.push({
-        inlineData: {
-          mimeType: mediaPayload.type,
-          data: mediaPayload.dataUri.split(',')[1], 
-        },
-      });
     }
     
     const userMessage: ChatMessage = {
@@ -231,8 +209,9 @@ export default function ChatPage() {
         );
     }
     
+    const aiPlaceholderMessageId = uuidv4();
     const aiPlaceholderMessage: ChatMessage = {
-        id: uuidv4(),
+        id: aiPlaceholderMessageId,
         sender: "ai",
         text: "",
         isStreaming: true,
@@ -246,213 +225,109 @@ export default function ChatPage() {
 
     setIsLoading(true);
 
-    const historyToSend: GeminiContent[] = [...tempMessagesForRequestSetup, userMessage]
-        .map(msg => {
-            const parts: GeminiPart[] = [];
-            // Only include text if it's a non-empty string
-            if (typeof msg.text === 'string' && msg.text.trim()) {
-                parts.push({ text: msg.text });
-            }
-            if (msg.media) {
-                parts.push({
-                    inlineData: {
-                        mimeType: msg.media.type,
-                        data: msg.media.dataUri.split(',')[1],
-                    },
-                });
-            }
-            return {
-                role: msg.sender === 'user' ? 'user' : 'model',
-                parts: parts,
-            };
-        })
-        .filter(content => content.parts.length > 0);
+    // Prepare history for Genkit flow
+    const historyForFlow: HistoryMessage[] = tempMessagesForRequestSetup
+      .filter(msg => typeof msg.text === 'string' || msg.media) // Ensure messages have content to send
+      .map(msg => {
+        const parts: HistoryMessage['parts'] = [];
+        if (typeof msg.text === 'string' && msg.text.trim()) {
+          parts.push({ text: msg.text });
+        }
+        if (msg.media?.dataUri) {
+          const base64Data = msg.media.dataUri.split(',')[1];
+          if (base64Data) {
+            parts.push({ inlineData: { mimeType: msg.media.type, data: base64Data } });
+          }
+        }
+        return {
+          role: msg.sender === 'user' ? 'user' : 'model',
+          parts: parts,
+        };
+      })
+      .filter(content => content.parts.length > 0);
+
 
     let accumulatedResponse = "";
+    let finalAiMessageText: string | React.ReactNode = "";
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:streamGenerateContent?key=${apiKey}&alt=sse`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: historyToSend }),
+      const stream = generateChatResponseFlow.stream({
+        prompt: messageText,
+        history: historyForFlow,
+        media: mediaPayload ? { name: mediaPayload.name, type: mediaPayload.type, dataUri: mediaPayload.dataUri } : undefined,
       });
 
-      if (!response.ok) {
-        let errorResponseMessage = `API request failed with status ${response.status}`;
-        try {
-          const errorData = await response.json();
-          if (errorData && errorData.error && errorData.error.message) {
-            errorResponseMessage = errorData.error.message;
-          }
-        } catch (e) {
-          // Non-JSON error response from API
-          console.warn("Could not parse error JSON from API, using status text or code as fallback.", e);
-          errorResponseMessage = response.statusText || `API request failed with status ${response.status}`;
-        }
-        
-        console.error("API Error (non-ok response):", errorResponseMessage);
-        const errorTextComponent = (
+      for await (const chunk of stream) {
+        if (chunk.error) {
+          console.error("Error from chat flow stream:", chunk.error);
+          finalAiMessageText = (
             <div className="text-destructive">
-                <AlertTriangle className="inline-block mr-2 h-4 w-4" />
-                Error: {errorResponseMessage}
+              <AlertTriangle className="inline-block mr-2 h-4 w-4" />
+              Error: {chunk.error}
             </div>
-        );
-        setCurrentMessages(prevMsgs => {
-            const updated = prevMsgs.map((msg, index) =>
-                index === prevMsgs.length - 1 
-                ? { ...msg, text: errorTextComponent, isStreaming: false } 
-                : msg
-            );
-            if(currentActiveChatIdForRequest) updateChatSessionMessages(currentActiveChatIdForRequest, updated.map(m => ({...m, isStreaming: false})));
-            return updated;
-        });
-        toast({ title: "API Error", description: errorResponseMessage, variant: "destructive" });
-        setIsLoading(false);
-        return; 
-      }
-
-      if (!response.body) {
-        const noBodyErrorMsg = "API request successful, but no response body found for streaming.";
-        console.error(noBodyErrorMsg);
-        const errorTextComponent = (
-          <div className="text-destructive">
-            <AlertTriangle className="inline-block mr-2 h-4 w-4" />
-            Error: {noBodyErrorMsg}
-          </div>
-        );
-        setCurrentMessages(prevMsgs => {
-          const updated = prevMsgs.map((msg, index) =>
-            index === prevMsgs.length - 1
-            ? { ...msg, text: errorTextComponent, isStreaming: false }
-            : msg
           );
-          if(currentActiveChatIdForRequest) updateChatSessionMessages(currentActiveChatIdForRequest, updated.map(m => ({...m, isStreaming: false})));
-          return updated;
-        });
-        toast({ title: "API Error", description: noBodyErrorMsg, variant: "destructive" });
-        setIsLoading(false);
-        return;
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) {
-          if (buffer.trim()) {
-            const lastLine = buffer.trim();
-            if (lastLine.startsWith("data: ")) {
-              try {
-                const jsonStr = lastLine.substring(6);
-                if (jsonStr) {
-                  const parsed = JSON.parse(jsonStr);
-                  if (parsed.candidates?.[0]?.content?.parts?.[0]?.text) {
-                    accumulatedResponse += parsed.candidates[0].content.parts[0].text;
-                  } 
-                }
-              } catch (e) { console.warn("Error parsing final JSON chunk:", e, "Buffer:", lastLine); }
-            }
-          }
-          break;
+          toast({ title: "Flow Error", description: chunk.error, variant: "destructive" });
+          break; 
         }
-
-        buffer += decoder.decode(value, { stream: true });
-        let eolIndex;
-        while ((eolIndex = buffer.indexOf('\n')) >= 0) {
-          const line = buffer.substring(0, eolIndex).trim();
-          buffer = buffer.substring(eolIndex + 1);
-
-          if (line.startsWith("data: ")) {
-            try {
-              const jsonStr = line.substring(6);
-              if (jsonStr.trim() === "") continue;
-              const parsed = JSON.parse(jsonStr);
-
-              if (parsed.candidates?.[0]?.content?.parts?.[0]?.text) {
-                 const textPart = parsed.candidates[0].content.parts[0].text;
-                 if (textPart) {
-                    accumulatedResponse += textPart;
-                    setCurrentMessages(prevMsgs => {
-                        const updated = prevMsgs.map((msg, index) =>
-                            index === prevMsgs.length - 1 
-                            ? { ...msg, text: accumulatedResponse, isStreaming: true } 
-                            : msg
-                        );
-                        return updated;
-                    });
-                 }
-              } else if (parsed.error) {
-                console.error("API error in stream:", parsed.error.message);
-                const errorText = (
-                    <div className="text-destructive">
-                        <AlertTriangle className="inline-block mr-2 h-4 w-4" />
-                        Error from API: {parsed.error.message}
-                    </div>
-                );
-                setCurrentMessages(prevMsgs => {
-                    const updated = prevMsgs.map((msg, index) =>
-                        index === prevMsgs.length - 1
-                        ? { ...msg, text: errorText, isStreaming: false }
-                        : msg
-                    );
-                    if(currentActiveChatIdForRequest) updateChatSessionMessages(currentActiveChatIdForRequest, updated.map(m => ({...m, isStreaming: false})));
-                    return updated;
-                });
-                setIsLoading(false);
-                reader.cancel().catch(e => console.warn("Error cancelling reader:", e)); 
-                return; 
-              }
-            } catch (e) { console.warn("Error parsing streaming JSON chunk:", e, "Line:", line); }
-          }
+        if (chunk.toolEvent) {
+           // Display tool event message (e.g., "Fetching content...")
+           // This could update the placeholder message or add a new temporary message
+           setCurrentMessages(prevMsgs =>
+            prevMsgs.map(msg =>
+              msg.id === aiPlaceholderMessageId
+                ? { ...msg, text: `${accumulatedResponse}\n\n*${chunk.toolEvent?.message || chunk.toolEvent?.toolName}...*`, isStreaming: true }
+                : msg
+            ));
+        }
+        if (chunk.textChunk) {
+          accumulatedResponse += chunk.textChunk;
+          finalAiMessageText = accumulatedResponse;
+          setCurrentMessages(prevMsgs =>
+            prevMsgs.map(msg =>
+              msg.id === aiPlaceholderMessageId
+                ? { ...msg, text: accumulatedResponse, isStreaming: true }
+                : msg
+            ));
         }
       }
       
-      setCurrentMessages(prevMsgs => {
-        const finalResponse = accumulatedResponse || "No text content in response.";
-        const updated = prevMsgs.map((msg, index) =>
-            index === prevMsgs.length - 1
-            ? { ...msg, text: finalResponse, isStreaming: false }
-            : msg
-        );
-        if(currentActiveChatIdForRequest) updateChatSessionMessages(currentActiveChatIdForRequest, updated);
-        return updated;
-      });
+      // After stream finishes, update the AI message with the final accumulated text
+      // and set isStreaming to false.
+      // The flow's return value gives the fullResponse.
+      const finalResult = await stream.output(); // Get the flow's final output
+      finalAiMessageText = finalResult?.fullResponse || accumulatedResponse || (React.isValidElement(finalAiMessageText) ? finalAiMessageText : "No response from AI.");
+      if (typeof finalAiMessageText === 'string' && finalAiMessageText.trim() === "" && !React.isValidElement(finalAiMessageText)) {
+        finalAiMessageText = "No text content in response.";
+      }
 
     } catch (error) { 
-      console.error("Error calling Gemini API (general catch):", error);
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      const errorTextComponent = (
+      console.error("Error calling generateChatResponseFlow:", error);
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred while calling the flow.";
+      finalAiMessageText = (
           <div className="text-destructive">
             <AlertTriangle className="inline-block mr-2 h-4 w-4" />
             Error: {errorMessage}
           </div>
       );
+      toast({ title: "Flow Error", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
       setCurrentMessages(prevMsgs => {
-        const updated = prevMsgs.map((msg, index) =>
-            index === prevMsgs.length - 1
-            ? { ...msg, text: errorTextComponent, isStreaming: false }
+        const updated = prevMsgs.map(msg =>
+          msg.id === aiPlaceholderMessageId
+            ? { ...msg, text: finalAiMessageText, isStreaming: false }
             : msg
         );
         if(currentActiveChatIdForRequest) updateChatSessionMessages(currentActiveChatIdForRequest, updated);
         return updated;
       });
-      toast({ title: "API Error", description: errorMessage, variant: "destructive" });
-    } finally {
-      setIsLoading(false);
-      if (currentActiveChatIdForRequest) {
-        setCurrentMessages(prev => {
-            const finalMessages = prev.map(m => ({...m, isStreaming: false}));
-            setChatSessions(sessions => sessions.map(s => 
-              s.id === currentActiveChatIdForRequest 
-              ? {...s, messages: finalMessages, lastUpdatedAt: Date.now()} 
-              : s
-            ));
-            return finalMessages;
-        });
-      }
+       // Ensure scroll to bottom after messages are fully updated
+      setTimeout(() => {
+        if (scrollAreaRef.current) {
+          const viewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
+          if (viewport) viewport.scrollTop = viewport.scrollHeight;
+        }
+      }, 0);
     }
   };
 
@@ -587,7 +462,7 @@ export default function ChatPage() {
         className="hidden md:flex"
       />
       <SidebarInset>
-        <div className="flex h-screen flex-col items-center bg-background text-foreground">
+        <div className="flex h-screen w-full flex-col items-center bg-background text-foreground">
           <header className="w-full flex justify-between items-center p-3 md:p-4 border-b border-border sticky top-0 bg-background z-10">
             <div className="flex items-center gap-2 flex-grow min-w-0">
               <Button variant="ghost" size="icon" onClick={toggleSidebar} className="md:hidden shrink-0" aria-label="Toggle History" disabled={isLoading || isCurrentlyEditingThisTitle}>
@@ -685,7 +560,7 @@ export default function ChatPage() {
                         variant="outline"
                         className="h-auto p-4 text-left justify-start bg-card hover:bg-accent/50"
                         onClick={() => handleSendMessage(`${prompt.title} ${prompt.description}`)}
-                        disabled={!apiKey || isLoading}
+                        disabled={isLoading}
                       >
                         <prompt.icon className="h-5 w-5 mr-3 text-primary shrink-0" />
                         <div>
@@ -702,19 +577,19 @@ export default function ChatPage() {
               ))}
             </ScrollArea>
             <div className="mt-auto px-2 md:px-0 pt-2">
-                {!apiKey && (
+                {!apiKey && ( // This check might be less relevant if Genkit relies on server-side .env for API key
                 <Alert variant="destructive" className="w-full mb-3">
                     <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>API Key Required</AlertTitle>
+                    <AlertTitle>API Key Information</AlertTitle>
                     <AlertDescription>
-                    Please set your Gemini API Key using the settings icon <Settings className="inline-block h-4 w-4 mx-1" /> to use the chat.
+                    The app is configured to use its server-side API key for Genkit. You can still set a key here for reference or potential future client-side features via <Settings className="inline-block h-4 w-4 mx-1" />.
                     </AlertDescription>
                 </Alert>
                 )}
               <ChatInput 
                 onSendMessage={handleSendMessage} 
                 isLoading={isLoading} 
-                disabled={!apiKey || isLoading || isCurrentlyEditingThisTitle} 
+                disabled={isLoading || isCurrentlyEditingThisTitle} 
               />
             </div>
           </div>
