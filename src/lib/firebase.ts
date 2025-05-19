@@ -1,6 +1,7 @@
 
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
+import { getAnalytics, Analytics } from 'firebase/analytics';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -20,5 +21,14 @@ if (!getApps().length) {
 }
 
 const auth: Auth = getAuth(app);
+let analytics: Analytics | null = null;
 
-export { app, auth };
+if (typeof window !== 'undefined') {
+  // Ensure Firebase app is initialized and getAnalytics function is available
+  // This is primarily to ensure it runs only on the client side.
+  if (firebaseConfig.apiKey && firebaseConfig.measurementId) { // Analytics requires measurementId
+      analytics = getAnalytics(app);
+  }
+}
+
+export { app, auth, analytics };
