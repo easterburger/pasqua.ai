@@ -3,7 +3,7 @@
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth as firebaseAuthInstance } from '@/lib/firebase'; // Renamed import
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 
@@ -36,7 +36,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const { toast } = useToast();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    if (!firebaseAuthInstance) {
+      setLoading(false);
+      console.error("Firebase Auth instance is not available. Cannot set up auth state listener.");
+      // Potentially set an error state here to inform the user in the UI if auth is critical
+      return;
+    }
+    const unsubscribe = onAuthStateChanged(firebaseAuthInstance, (user) => {
       setCurrentUser(user);
       setLoading(false);
     });
@@ -44,9 +50,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const signup = async (email: string, pass: string): Promise<User | null> => {
+    if (!firebaseAuthInstance) {
+      toast({ title: "Authentication Error", description: "Firebase Auth service is not available.", variant: "destructive" });
+      setLoading(false); // Ensure loading state is managed
+      return null;
+    }
     setLoading(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+      const userCredential = await createUserWithEmailAndPassword(firebaseAuthInstance, email, pass);
       setCurrentUser(userCredential.user);
       toast({ title: "Account Created", description: "Successfully signed up!" });
       router.push('/'); // Redirect to home after signup
@@ -61,9 +72,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const login = async (email: string, pass: string): Promise<User | null> => {
+    if (!firebaseAuthInstance) {
+      toast({ title: "Authentication Error", description: "Firebase Auth service is not available.", variant: "destructive" });
+      setLoading(false); // Ensure loading state is managed
+      return null;
+    }
     setLoading(true);
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, pass);
+      const userCredential = await signInWithEmailAndPassword(firebaseAuthInstance, email, pass);
       setCurrentUser(userCredential.user);
       toast({ title: "Login Successful", description: "Welcome back!" });
       router.push('/'); // Redirect to home after login
@@ -78,9 +94,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const logout = async () => {
+    if (!firebaseAuthInstance) {
+      toast({ title: "Authentication Error", description: "Firebase Auth service is not available.", variant: "destructive" });
+      setLoading(false); // Ensure loading state is managed
+      return;
+    }
     setLoading(true);
     try {
-      await firebaseSignOut(auth);
+      await firebaseSignOut(firebaseAuthInstance);
       setCurrentUser(null);
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
       router.push('/auth/login'); // Redirect to login after logout
