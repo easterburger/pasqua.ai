@@ -14,13 +14,13 @@ import {
   SidebarTrigger,
   useSidebar, 
 } from "@/components/ui/sidebar";
-import { SheetTitle } from "@/components/ui/sheet"; // Keep for mobile
+import { SheetTitle } from "@/components/ui/sheet"; 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PasquaIcon } from "@/components/icons/PasquaIcon";
-import { Edit3, MessageSquare, Trash2, Layers } from "lucide-react"; // Added Layers
+import { Edit3, MessageSquare, Trash2, Layers, Mic } from "lucide-react"; 
 import type { ChatSession } from "@/lib/types";
 import { formatDistanceToNow } from 'date-fns';
-import Link from "next/link"; // Added Link
+import Link from "next/link"; 
 
 interface ChatHistorySidebarProps {
   chatSessions: ChatSession[];
@@ -58,36 +58,17 @@ export function ChatHistorySidebar({
                 <PasquaIcon className="h-7 w-7 text-primary cursor-pointer" />
              </Link>
             {isMobile ? (
-              <SheetTitle className="text-lg font-semibold group-data-[collapsible=icon]:hidden">History</SheetTitle>
+              <SheetTitle className="text-lg font-semibold group-data-[collapsible=icon]:hidden">Menu</SheetTitle>
             ) : (
               <h2 className="text-lg font-semibold group-data-[collapsible=icon]:hidden">Pasqua AI</h2>
             )}
           </div>
-          <SidebarTrigger disabled={isLoading} />
+          {!isMobile && <SidebarTrigger disabled={isLoading} />}
         </div>
       </SidebarHeader>
       <SidebarContent className="flex-1 p-0">
         <ScrollArea className="h-full">
           <SidebarMenu className="px-2 py-2">
-            {/* Flashcards Link */}
-            <SidebarMenuItem>
-              <Link href="/flashcards" passHref legacyBehavior>
-                <SidebarMenuButton
-                  asChild
-                  isActive={typeof window !== 'undefined' && window.location.pathname === "/flashcards"}
-                  className="justify-start w-full text-left h-auto py-2 px-2 group-data-[collapsible=icon]:justify-center"
-                  tooltip="Flashcards"
-                  disabled={isLoading} // Consider if flashcard generation has its own loading state
-                >
-                  <a>
-                    <Layers className="h-4 w-4" />
-                    <span className="group-data-[collapsible=icon]:hidden">Flashcards</span>
-                  </a>
-                </SidebarMenuButton>
-              </Link>
-            </SidebarMenuItem>
-
-            {/* New Chat Button - moved up for better UX when sidebar is collapsed */}
              <SidebarMenuItem>
                  <SidebarMenuButton
                     onClick={onNewChat}
@@ -98,6 +79,40 @@ export function ChatHistorySidebar({
                     <Edit3 className="h-4 w-4" />
                     <span className="group-data-[collapsible=icon]:hidden">New Chat</span>
                 </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <Link href="/flashcards" passHref legacyBehavior>
+                <SidebarMenuButton
+                  asChild
+                  isActive={typeof window !== 'undefined' && window.location.pathname === "/flashcards"}
+                  className="justify-start w-full text-left h-auto py-2 px-2 group-data-[collapsible=icon]:justify-center"
+                  tooltip="Flashcards"
+                  disabled={isLoading} 
+                >
+                  <a>
+                    <Layers className="h-4 w-4" />
+                    <span className="group-data-[collapsible=icon]:hidden">Flashcards</span>
+                  </a>
+                </SidebarMenuButton>
+              </Link>
+            </SidebarMenuItem>
+            
+            <SidebarMenuItem>
+              <Link href="/podcast" passHref legacyBehavior>
+                <SidebarMenuButton
+                  asChild
+                  isActive={typeof window !== 'undefined' && window.location.pathname === "/podcast"}
+                  className="justify-start w-full text-left h-auto py-2 px-2 group-data-[collapsible=icon]:justify-center"
+                  tooltip="Podcast Script Generator"
+                  disabled={isLoading}
+                >
+                  <a>
+                    <Mic className="h-4 w-4" />
+                    <span className="group-data-[collapsible=icon]:hidden">Podcast Scripts</span>
+                  </a>
+                </SidebarMenuButton>
+              </Link>
             </SidebarMenuItem>
 
 
@@ -151,3 +166,4 @@ export function ChatHistorySidebar({
     </Sidebar>
   );
 }
+
