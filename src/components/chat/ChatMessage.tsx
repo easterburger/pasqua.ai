@@ -5,12 +5,14 @@ import * as React from "react";
 import type { ChatMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Bot, User, FileText, Download } from "lucide-react";
+import { Bot, User, FileText, Download, ClipboardCopy } from "lucide-react";
 import Image from 'next/image'; // For optimized image display
-import { Button } from "@/components/ui/button"; // Added import
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 export function ChatMessage({ sender, text, media, isStreaming, timestamp }: ChatMessage) {
   const isUser = sender === "user";
+  const { toast } = useToast();
 
   let contentToRender = text;
   if (typeof text === 'object' && text !== null && !React.isValidElement(text)) {
@@ -28,10 +30,28 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
     }
   };
 
+  const handleCopy = async () => {
+    if (typeof text === 'string') {
+      try {
+        await navigator.clipboard.writeText(text);
+        toast({
+          title: "Copied to clipboard!",
+        });
+      } catch (err) {
+        console.error("Failed to copy text: ", err);
+        toast({
+          title: "Failed to copy",
+          description: "Could not copy text to clipboard.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
   return (
     <div
       className={cn(
-        "flex items-start gap-3 py-4",
+        "flex items-start gap-3 py-4 group/message", // Added group/message for hover effects
         isUser ? "justify-end" : "justify-start"
       )}
     >
@@ -44,7 +64,7 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
       )}
       <div
         className={cn(
-          "max-w-[80%] rounded-lg px-4 py-3 shadow-md break-words flex flex-col gap-2",
+          "relative max-w-[80%] rounded-lg px-4 py-3 shadow-md break-words flex flex-col gap-2",
           isUser
             ? "bg-primary text-primary-foreground rounded-br-none"
             : "bg-card text-card-foreground rounded-bl-none"
@@ -57,8 +77,8 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
               <Image
                 src={media.dataUri}
                 alt={media.name || "Uploaded image"}
-                width={300} // Adjust as needed
-                height={200} // Adjust as needed
+                width={300}
+                height={200}
                 className="rounded-md object-contain max-h-64 w-auto"
                 data-ai-hint="uploaded image"
               />
@@ -92,6 +112,17 @@ export function ChatMessage({ sender, text, media, isStreaming, timestamp }: Cha
         )}
          {!contentToRender && !media && !isStreaming && (
           <div className="italic text-muted-foreground/80">(empty message)</div>
+        )}
+        {!isUser && !isStreaming && typeof text === 'string' && text.trim() && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleCopy}
+            className="absolute -top-2 -right-2 h-7 w-7 text-muted-foreground opacity-0 group-hover/message:opacity-100 transition-opacity"
+            aria-label="Copy message"
+          >
+            <ClipboardCopy className="h-4 w-4" />
+          </Button>
         )}
       </div>
       {isUser && (
