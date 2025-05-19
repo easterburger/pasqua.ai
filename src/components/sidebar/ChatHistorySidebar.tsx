@@ -27,7 +27,7 @@ interface ChatHistorySidebarProps {
   onNewChat: () => void;
   onSelectChat: (sessionId: string) => void;
   onDeleteChat: (sessionId: string) => void;
-  isLoading: boolean; // Added isLoading prop
+  isLoading: boolean; 
   className?: string;
 }
 
@@ -37,7 +37,7 @@ export function ChatHistorySidebar({
   onNewChat,
   onSelectChat,
   onDeleteChat,
-  isLoading, // Use isLoading prop
+  isLoading, 
   className,
 }: ChatHistorySidebarProps) {
   const { isMobile } = useSidebar(); 
@@ -60,7 +60,7 @@ export function ChatHistorySidebar({
               <h2 className="text-lg font-semibold group-data-[collapsible=icon]:hidden">History</h2>
             )}
           </div>
-          <SidebarTrigger className="group-data-[collapsible=icon]:hidden" disabled={isLoading} />
+          <SidebarTrigger disabled={isLoading} />
         </div>
       </SidebarHeader>
       <SidebarContent className="flex-1 p-0">
@@ -73,7 +73,7 @@ export function ChatHistorySidebar({
                   isActive={session.id === activeChatId}
                   className="justify-start w-full text-left h-auto py-2 px-2 group-data-[collapsible=icon]:justify-center"
                   tooltip={session.title}
-                  disabled={isLoading} // Disable when loading
+                  disabled={isLoading} 
                 >
                   <MessageSquare className="h-4 w-4" />
                   <div className="flex flex-col group-data-[collapsible=icon]:hidden overflow-hidden">
@@ -92,7 +92,7 @@ export function ChatHistorySidebar({
                     onDeleteChat(session.id);
                   }}
                   aria-label="Delete chat"
-                  disabled={isLoading} // Disable when loading
+                  disabled={isLoading} 
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -107,7 +107,7 @@ export function ChatHistorySidebar({
             className="w-full justify-center group-data-[collapsible=icon]:justify-center"
             onClick={onNewChat}
             aria-label="New Chat"
-            disabled={isLoading} // Disable when loading
+            disabled={isLoading} 
           >
             <Edit3 className="h-4 w-4" />
            <span className="ml-2 group-data-[collapsible=icon]:hidden">New Chat</span>
