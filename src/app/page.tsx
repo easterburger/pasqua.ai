@@ -22,20 +22,21 @@ import { ChatMessage as ChatMessageComponent } from "@/components/chat/ChatMessa
 import { ApiKeyDialog } from "@/components/chat/ApiKeyDialog";
 import { API_KEY_LOCAL_STORAGE_KEY, CHAT_SESSIONS_LOCAL_STORAGE_KEY } from "@/lib/constants";
 import { PasquaIcon } from "@/components/icons/PasquaIcon";
-import { Settings, AlertTriangle, Lightbulb, Telescope, Zap, MoreHorizontal, Edit3, Trash2, PanelLeft } from "lucide-react";
+import { Settings, AlertTriangle, Lightbulb, Telescope, Zap, MoreHorizontal, Edit3, Trash2, PanelLeft, LogOut, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SidebarInset, useSidebar, SidebarTrigger } from "@/components/ui/sidebar";
 import { ChatHistorySidebar } from "@/components/sidebar/ChatHistorySidebar";
 import { useTheme } from "@/components/theme/theme-provider";
 import { ThemeToggleItemContent } from "@/components/theme/theme-toggle-item-content";
-
+import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
+import { useRouter } from "next/navigation"; // Import useRouter
 
 const examplePrompts = [
   { title: "Brainstorm ideas", description: "for my new indie game", icon: Lightbulb },
   { title: "Explain a complex topic", description: "like quantum computing in simple terms", icon: Zap },
   { title: "Write a poem", description: "about the beauty of nature", icon: Edit3 },
-  { title: "Summarize an article", description: "from a URL you provide (Note: URL fetching not yet implemented)", icon: Telescope },
+  { title: "Summarize an article", description: "from a URL (Note: URL fetching not currently implemented)", icon: Telescope },
 ];
 
 
@@ -47,6 +48,8 @@ export default function ChatPage() {
   const scrollAreaRef = React.useRef<HTMLDivElement>(null);
   const { isMobile, toggleSidebar, state: sidebarState } = useSidebar();
   const { theme, setTheme } = useTheme();
+  const { currentUser, logout, loading: authLoading } = useAuth(); // Get user and logout from AuthContext
+  const router = useRouter(); // Get router instance
 
 
   const [chatSessions, setChatSessions] = React.useState<ChatSession[]>([]);
@@ -58,8 +61,17 @@ export default function ChatPage() {
   const [titleInputValue, setTitleInputValue] = React.useState('');
   const titleInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Redirect if not logged in and not loading auth state
+  React.useEffect(() => {
+    if (!authLoading && !currentUser) {
+      router.push('/auth/login');
+    }
+  }, [currentUser, authLoading, router]);
+
 
   React.useEffect(() => {
+    if (!currentUser) return; // Don't proceed if no user
+
     const storedApiKey = localStorage.getItem(API_KEY_LOCAL_STORAGE_KEY);
     if (storedApiKey) {
       setApiKey(storedApiKey);
@@ -88,16 +100,17 @@ export default function ChatPage() {
       handleNewChat(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentUser]); // Depend on currentUser to re-run when auth state changes
 
   React.useEffect(() => {
+    if (!currentUser) return; // Don't save if no user
     const sessionsToSave = chatSessions.filter(s => !s.isTemporary);
     if (sessionsToSave.length > 0) {
       localStorage.setItem(CHAT_SESSIONS_LOCAL_STORAGE_KEY, JSON.stringify(sessionsToSave));
     } else {
       localStorage.removeItem(CHAT_SESSIONS_LOCAL_STORAGE_KEY);
     }
-  }, [chatSessions]);
+  }, [chatSessions, currentUser]);
 
   React.useEffect(() => {
     if (scrollAreaRef.current) {
@@ -143,9 +156,10 @@ export default function ChatPage() {
 
 
   const handleSendMessage = async (messageText: string, mediaPayload?: ChatMessageMedia) => {
-    if (!apiKey) {
-      toast({ title: "API Key Missing", description: "Please set your Gemini API key in settings.", variant: "destructive" });
-      setIsApiKeyDialogOpen(true);
+    if (!currentUser || !apiKey) {
+      toast({ title: "API Key Missing or Not Logged In", description: "Please ensure you are logged in and set your Gemini API key in settings.", variant: "destructive" });
+      if (!apiKey) setIsApiKeyDialogOpen(true);
+      if (!currentUser) router.push('/auth/login');
       return;
     }
     if (editingChatSessionId) {
@@ -159,10 +173,9 @@ export default function ChatPage() {
     const currentActiveChatIsPristineTemporary = currentActiveSessionDetails?.isTemporary && tempMessagesForRequestSetup.length === 0;
 
     if (!currentActiveChatIdForRequest || (isTemporaryChat && !currentActiveChatIsPristineTemporary)) {
-        const newId = handleNewChat(false);
+        const newId = handleNewChat(false); // This will call setCurrentMessages([]) internally
         currentActiveChatIdForRequest = newId;
-        tempMessagesForRequestSetup = [];
-         setCurrentMessages([]);
+        tempMessagesForRequestSetup = []; // Reset explicitly for this request context
     } else if (isTemporaryChat && currentActiveChatIsPristineTemporary && currentActiveChatIdForRequest) {
         setChatSessions(prev => prev.map(s => s.id === currentActiveChatIdForRequest ? {...s, isTemporary: false, title: "New Chat", lastUpdatedAt: Date.now()} : s));
         setIsTemporaryChat(false);
@@ -185,15 +198,19 @@ export default function ChatPage() {
         }
     }
 
-    const updatedMessagesWithUser = [...tempMessagesForRequestSetup, userMessage];
-    setCurrentMessages(updatedMessagesWithUser);
+    // Use functional update for setCurrentMessages
+    setCurrentMessages(prevMsgs => [...prevMsgs, userMessage]);
+    // Update tempMessagesForRequestSetup to reflect the added user message for history construction
+    tempMessagesForRequestSetup = [...tempMessagesForRequestSetup, userMessage];
+
+
     if (currentActiveChatIdForRequest) {
         setChatSessions(prevSessions =>
           prevSessions.map(session =>
             session.id === currentActiveChatIdForRequest
               ? {
                   ...session,
-                  messages: updatedMessagesWithUser,
+                  messages: [...session.messages, userMessage], // Use userMessage directly here
                   title: autoTitle ? autoTitle : session.title,
                   lastUpdatedAt: Date.now(),
                   isTemporary: (isTemporaryChat && currentActiveChatIsPristineTemporary) ? false : session.isTemporary,
@@ -212,16 +229,18 @@ export default function ChatPage() {
         timestamp: Date.now()
     };
 
-    const updatedMessagesWithPlaceholder = [...updatedMessagesWithUser, aiPlaceholderMessage];
-    setCurrentMessages(updatedMessagesWithPlaceholder);
+    setCurrentMessages(prevMsgs => [...prevMsgs, aiPlaceholderMessage]);
     if (currentActiveChatIdForRequest) {
-      updateChatSessionMessages(currentActiveChatIdForRequest, updatedMessagesWithPlaceholder, autoTitle || undefined);
+      // The AI placeholder is only for UI, update actual session with it later after response.
+      // updateChatSessionMessages relies on setCurrentMessages state, which is async.
+      // Let's pass the combined messages directly to ensure atomicity for the update
+       const messagesWithPlaceholder = [...tempMessagesForRequestSetup, aiPlaceholderMessage];
+       updateChatSessionMessages(currentActiveChatIdForRequest, messagesWithPlaceholder, autoTitle || undefined);
     }
 
     setIsLoading(true);
 
-    const historyForApi = updatedMessagesWithUser
-      .filter(msg => msg.id !== aiPlaceholderMessageId) // Exclude the current AI placeholder
+    const historyForApi = tempMessagesForRequestSetup // Use the most up-to-date list *before* placeholder
       .filter(msg => (typeof msg.text === 'string' && msg.text.trim() !== "") || msg.media)
       .map(msg => {
         const parts: any[] = [];
@@ -241,16 +260,8 @@ export default function ChatPage() {
       })
       .filter(content => content.parts.length > 0);
 
-
-    // Construct the final contents array including the current user message
-    const finalContentsForApi = [...historyForApi];
-    // The userMessage parts are already included via updatedMessagesWithUser for historyForApi.
-    // If historyForApi was based on tempMessagesForRequestSetup, we'd add userMessage parts here.
-    // But since it's based on updatedMessagesWithUser, it's already there.
-
     const requestBody = {
-      contents: finalContentsForApi,
-      // TODO: Consider adding generationConfig and safetySettings if needed
+      contents: historyForApi, // Use the filtered history
     };
 
     let accumulatedResponse = "";
@@ -272,7 +283,24 @@ export default function ChatPage() {
         console.error("API Error (non-ok response):", apiErrorMessage);
         finalAiMessageText = <div className="text-destructive"><AlertTriangle className="inline-block mr-2 h-4 w-4" />Error: {apiErrorMessage}</div>;
         toast({ title: "API Error", description: apiErrorMessage, variant: "destructive" });
-      } else {
+        // Update UI with this error
+        setCurrentMessages(prevMsgs =>
+          prevMsgs.map(msg =>
+            msg.id === aiPlaceholderMessageId
+              ? { ...msg, text: finalAiMessageText, isStreaming: false }
+              : msg
+          )
+        );
+        setIsLoading(false); // Ensure loading is stopped
+        if(currentActiveChatIdForRequest) { // Persist the error message to the session
+            const finalMessagesWithError = tempMessagesForRequestSetup.map(msg => msg.id === aiPlaceholderMessageId ? { ...msg, text: finalAiMessageText, isStreaming: false } : msg);
+            // Actually, AI placeholder is not in tempMessagesForRequestSetup, it's added after.
+            // So, we need to use the currentMessages state, but find the placeholder and update it.
+            const finalErrorStateMessages = currentMessages.map(m => m.id === aiPlaceholderMessageId ? { ...m, text: finalAiMessageText, isStreaming: false } : m);
+            updateChatSessionMessages(currentActiveChatIdForRequest, finalErrorStateMessages);
+        }
+        return; // Stop processing on stream error
+      }
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -295,7 +323,6 @@ export default function ChatPage() {
                   console.error("Error in stream from API:", chunkData.error.message);
                   finalAiMessageText = <div className="text-destructive"><AlertTriangle className="inline-block mr-2 h-4 w-4" />Stream Error: {chunkData.error.message}</div>;
                   toast({ title: "Stream Error", description: chunkData.error.message, variant: "destructive" });
-                  // Update UI with this error
                   setCurrentMessages(prevMsgs =>
                     prevMsgs.map(msg =>
                       msg.id === aiPlaceholderMessageId
@@ -304,12 +331,16 @@ export default function ChatPage() {
                     )
                   );
                   setIsLoading(false);
-                  return; // Stop processing on stream error
+                  if(currentActiveChatIdForRequest) {
+                    const finalErrorStateMessages = currentMessages.map(m => m.id === aiPlaceholderMessageId ? { ...m, text: finalAiMessageText, isStreaming: false } : m);
+                    updateChatSessionMessages(currentActiveChatIdForRequest, finalErrorStateMessages);
+                  }
+                  return; 
                 }
 
                 if (chunkData.candidates?.[0]?.content?.parts?.[0]?.text) {
                   accumulatedResponse += chunkData.candidates[0].content.parts[0].text;
-                  finalAiMessageText = accumulatedResponse;
+                  finalAiMessageText = accumulatedResponse; // Keep as string for final processing
                   setCurrentMessages(prevMsgs =>
                     prevMsgs.map(msg =>
                       msg.id === aiPlaceholderMessageId
@@ -318,7 +349,6 @@ export default function ChatPage() {
                     ));
                 }
               } catch (e) {
-                // This might happen if a non-JSON line is processed, or malformed JSON
                 console.warn("Error parsing stream chunk or non-JSON line:", e, "Chunk:", line);
               }
             }
@@ -340,7 +370,7 @@ export default function ChatPage() {
         if (typeof finalAiMessageText === 'string' && finalAiMessageText.trim() === "") {
           finalAiMessageText = "No text content in response.";
         }
-      }
+      
     } catch (error) {
       console.error("Error in handleSendMessage:", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred while processing stream.";
@@ -356,7 +386,7 @@ export default function ChatPage() {
       setCurrentMessages(prevMsgs => {
         const updated = prevMsgs.map(msg =>
           msg.id === aiPlaceholderMessageId
-            ? { ...msg, text: finalAiMessageText, isStreaming: false }
+            ? { ...msg, text: finalAiMessageText, isStreaming: false } // finalAiMessageText is now string or ReactNode
             : msg
         );
         if(currentActiveChatIdForRequest) updateChatSessionMessages(currentActiveChatIdForRequest, updated);
@@ -372,7 +402,7 @@ export default function ChatPage() {
   };
 
   const handleNewChat = (temporary: boolean) => {
-    if (isLoading) return "";
+    if (isLoading || !currentUser) return ""; // Don't create chat if not logged in or loading
     if (editingChatSessionId) {
       setEditingChatSessionId(null);
     }
@@ -390,12 +420,12 @@ export default function ChatPage() {
     setActiveChatId(newChatId);
     setCurrentMessages([]);
     setIsTemporaryChat(temporary);
-    if (isMobile && sidebarState === 'expanded') toggleSidebar(); // Close sidebar on mobile if open
+    if (isMobile && sidebarState === 'expanded') toggleSidebar(); 
     return newChatId;
   };
 
   const handleSelectChat = (sessionId: string) => {
-    if (isLoading || editingChatSessionId === sessionId) return;
+    if (isLoading || editingChatSessionId === sessionId || !currentUser) return;
     if (editingChatSessionId && editingChatSessionId !== sessionId) {
       setEditingChatSessionId(null);
     }
@@ -410,7 +440,7 @@ export default function ChatPage() {
   };
 
   const handleDeleteChat = (sessionId: string) => {
-    if (isLoading) return;
+    if (isLoading || !currentUser) return;
      if (editingChatSessionId === sessionId) {
       setEditingChatSessionId(null);
     }
@@ -427,7 +457,7 @@ export default function ChatPage() {
   };
 
   const handleTemporaryChatToggle = (checked: boolean) => {
-    if (isLoading || editingChatSessionId) return;
+    if (isLoading || editingChatSessionId || !currentUser) return;
 
     setIsTemporaryChat(checked);
     if (activeChatId) {
@@ -482,6 +512,11 @@ export default function ChatPage() {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
+  const handleLogout = async () => {
+    await logout();
+    // AuthContext's logout will handle redirection
+  };
+
 
   const activeSession = chatSessions.find(s => s.id === activeChatId);
   const currentActualChatTitle = activeSession?.title || "New Chat";
@@ -491,6 +526,25 @@ export default function ChatPage() {
     : currentActualChatTitle;
   const isCurrentlyEditingThisTitle = editingChatSessionId === activeChatId;
 
+  // Loading state for entire page until auth is resolved
+  if (authLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // If no user, this component should not render its main content
+  // The useEffect hook handles redirection, but this is a safeguard.
+  if (!currentUser) {
+     return (
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <p>Redirecting to login...</p>
+        <Loader2 className="ml-2 h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-full">
@@ -583,6 +637,11 @@ export default function ChatPage() {
                        <Trash2 className="mr-2 h-4 w-4" /> Delete Current Chat
                     </DropdownMenuItem>
                   )}
+                  <DropdownMenuSeparator />
+                   <DropdownMenuItem onClick={handleLogout} disabled={authLoading}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Logout
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
               <Button variant="ghost" size="icon" onClick={() => setIsApiKeyDialogOpen(true)} aria-label="API Key Settings" className="h-9 w-9" disabled={isLoading || isCurrentlyEditingThisTitle}>
@@ -604,7 +663,7 @@ export default function ChatPage() {
                         variant="outline"
                         className="h-auto p-4 text-left justify-start bg-card hover:bg-accent/50"
                         onClick={() => handleSendMessage(`${prompt.title} ${prompt.description}`)}
-                        disabled={isLoading || !apiKey}
+                        disabled={isLoading || !apiKey || !currentUser}
                       >
                         <prompt.icon className="h-5 w-5 mr-3 text-primary shrink-0" />
                         <div>
@@ -633,7 +692,7 @@ export default function ChatPage() {
               <ChatInput
                 onSendMessage={handleSendMessage}
                 isLoading={isLoading}
-                disabled={isLoading || !apiKey || isCurrentlyEditingThisTitle}
+                disabled={isLoading || !apiKey || isCurrentlyEditingThisTitle || !currentUser}
               />
             </div>
           </div>
@@ -648,5 +707,3 @@ export default function ChatPage() {
     </div>
   );
 }
-
-    
