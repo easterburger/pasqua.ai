@@ -56,10 +56,6 @@ export default function LoginPage() {
           <CardTitle className="text-3xl font-bold">Welcome Back!</CardTitle>
           <CardDescription>
             Sign in with your username and password.
-            <br />
-            <span className="text-xs text-destructive font-semibold">
-              WARNING: This is a simulated login and is NOT secure. For demonstration only.
-            </span>
           </CardDescription>
         </CardHeader>
         <CardContent>
