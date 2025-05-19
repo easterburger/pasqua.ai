@@ -17,7 +17,7 @@ import {
 import { SheetTitle } from "@/components/ui/sheet"; 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PasquaIcon } from "@/components/icons/PasquaIcon";
-import { Edit3, MessageSquare, Trash2, Layers, Mic, FileQuestion } from "lucide-react"; 
+import { Edit3, MessageSquare, Trash2, Layers, Mic, FileQuestion, BookOpenCheck } from "lucide-react"; 
 import type { ChatSession } from "@/lib/types";
 import { formatDistanceToNow } from 'date-fns';
 import Link from "next/link"; 
@@ -127,6 +127,23 @@ export function ChatHistorySidebar({
                   <a>
                     <FileQuestion className="h-4 w-4" />
                     <span className="group-data-[collapsible=icon]:hidden">Test Maker</span>
+                  </a>
+                </SidebarMenuButton>
+              </Link>
+            </SidebarMenuItem>
+            
+            <SidebarMenuItem>
+              <Link href="/study-guide" passHref legacyBehavior>
+                <SidebarMenuButton
+                  asChild
+                  isActive={typeof window !== 'undefined' && window.location.pathname === "/study-guide"}
+                  className="justify-start w-full text-left h-auto py-2 px-2 group-data-[collapsible=icon]:justify-center"
+                  tooltip="Study Guide Creator"
+                  disabled={isLoading}
+                >
+                  <a>
+                    <BookOpenCheck className="h-4 w-4" />
+                    <span className="group-data-[collapsible=icon]:hidden">Study Guides</span>
                   </a>
                 </SidebarMenuButton>
               </Link>
