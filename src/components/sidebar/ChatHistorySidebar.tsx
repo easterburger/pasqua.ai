@@ -17,7 +17,7 @@ import {
 import { SheetTitle } from "@/components/ui/sheet"; 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PasquaIcon } from "@/components/icons/PasquaIcon";
-import { Edit3, MessageSquare, Trash2, Layers, Mic } from "lucide-react"; 
+import { Edit3, MessageSquare, Trash2, Layers, Mic, FileQuestion } from "lucide-react"; 
 import type { ChatSession } from "@/lib/types";
 import { formatDistanceToNow } from 'date-fns';
 import Link from "next/link"; 
@@ -63,7 +63,7 @@ export function ChatHistorySidebar({
               <h2 className="text-lg font-semibold group-data-[collapsible=icon]:hidden">Pasqua AI</h2>
             )}
           </div>
-          {!isMobile && <SidebarTrigger disabled={isLoading} />}
+          {!isMobile && <SidebarTrigger onClick={toggleSidebar} disabled={isLoading} />}
         </div>
       </SidebarHeader>
       <SidebarContent className="flex-1 p-0">
@@ -110,6 +110,23 @@ export function ChatHistorySidebar({
                   <a>
                     <Mic className="h-4 w-4" />
                     <span className="group-data-[collapsible=icon]:hidden">Podcast Scripts</span>
+                  </a>
+                </SidebarMenuButton>
+              </Link>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <Link href="/test-maker" passHref legacyBehavior>
+                <SidebarMenuButton
+                  asChild
+                  isActive={typeof window !== 'undefined' && window.location.pathname === "/test-maker"}
+                  className="justify-start w-full text-left h-auto py-2 px-2 group-data-[collapsible=icon]:justify-center"
+                  tooltip="Test Maker"
+                  disabled={isLoading}
+                >
+                  <a>
+                    <FileQuestion className="h-4 w-4" />
+                    <span className="group-data-[collapsible=icon]:hidden">Test Maker</span>
                   </a>
                 </SidebarMenuButton>
               </Link>
