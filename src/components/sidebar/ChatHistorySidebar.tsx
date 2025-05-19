@@ -21,6 +21,7 @@ import { Edit3, MessageSquare, Trash2, Layers, Mic, FileQuestion, BookOpenCheck 
 import type { ChatSession } from "@/lib/types";
 import { formatDistanceToNow } from 'date-fns';
 import Link from "next/link"; 
+import { Badge } from "@/components/ui/badge"; // Import Badge component
 
 interface ChatHistorySidebarProps {
   chatSessions: ChatSession[];
@@ -60,7 +61,10 @@ export function ChatHistorySidebar({
             {isMobile ? (
               <SheetTitle className="text-lg font-semibold group-data-[collapsible=icon]:hidden">Menu</SheetTitle>
             ) : (
-              <h2 className="text-lg font-semibold group-data-[collapsible=icon]:hidden">Pasqua AI</h2>
+              <div className="flex items-center gap-1.5 group-data-[collapsible=icon]:hidden">
+                <h2 className="text-lg font-semibold">Pasqua AI</h2>
+                <Badge variant="default" className="px-1.5 py-0.5 text-xs leading-none">beta</Badge>
+              </div>
             )}
           </div>
           {!isMobile && <SidebarTrigger onClick={toggleSidebar} disabled={isLoading} />}
@@ -109,7 +113,10 @@ export function ChatHistorySidebar({
                 >
                   <a>
                     <Mic className="h-4 w-4" />
-                    <span className="group-data-[collapsible=icon]:hidden">Podcast Scripts</span>
+                    <span className="group-data-[collapsible=icon]:hidden flex items-center">
+                        Podcast Scripts 
+                        <Badge variant="default" className="ml-1.5 px-1.5 py-0.5 text-xs leading-none">beta</Badge>
+                    </span>
                   </a>
                 </SidebarMenuButton>
               </Link>
