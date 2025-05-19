@@ -14,7 +14,7 @@ interface ChatInputProps {
   disabled?: boolean;
 }
 
-const MAX_FILE_SIZE_MB = 5;
+const MAX_FILE_SIZE_MB = 10; // Increased from 5MB to 10MB
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 export function ChatInput({ onSendMessage, isLoading, disabled = false }: ChatInputProps) {
@@ -30,7 +30,7 @@ export function ChatInput({ onSendMessage, isLoading, disabled = false }: ChatIn
       if (file.size > MAX_FILE_SIZE_BYTES) {
         toast({
           title: "File Too Large",
-          description: `Please select a file smaller than ${MAX_FILE_SIZE_MB}MB.`,
+          description: `Please select a file smaller than ${MAX_FILE_SIZE_MB}MB.`, // Message will now reflect 10MB
           variant: "destructive",
         });
         if (fileInputRef.current) {
@@ -135,7 +135,7 @@ export function ChatInput({ onSendMessage, isLoading, disabled = false }: ChatIn
             ref={fileInputRef}
             onChange={handleFileChange}
             className="hidden"
-            accept="image/*,application/pdf"
+            accept="image/*,application/pdf" // Still accepting same types
             disabled={isLoading || disabled}
         />
         <Textarea
