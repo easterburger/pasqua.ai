@@ -17,9 +17,10 @@ import {
 import { SheetTitle } from "@/components/ui/sheet"; // Keep for mobile
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PasquaIcon } from "@/components/icons/PasquaIcon";
-import { Edit3, MessageSquare, Trash2 } from "lucide-react";
+import { Edit3, MessageSquare, Trash2, Layers } from "lucide-react"; // Added Layers
 import type { ChatSession } from "@/lib/types";
 import { formatDistanceToNow } from 'date-fns';
+import Link from "next/link"; // Added Link
 
 interface ChatHistorySidebarProps {
   chatSessions: ChatSession[];
@@ -40,7 +41,7 @@ export function ChatHistorySidebar({
   isLoading, 
   className,
 }: ChatHistorySidebarProps) {
-  const { isMobile } = useSidebar(); 
+  const { isMobile, toggleSidebar, state: sidebarState } = useSidebar(); 
 
   const sortedSessions = React.useMemo(() => {
     return [...chatSessions]
@@ -53,11 +54,13 @@ export function ChatHistorySidebar({
       <SidebarHeader className="p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <PasquaIcon className="h-7 w-7 text-primary" />
+             <Link href="/" passHref>
+                <PasquaIcon className="h-7 w-7 text-primary cursor-pointer" />
+             </Link>
             {isMobile ? (
               <SheetTitle className="text-lg font-semibold group-data-[collapsible=icon]:hidden">History</SheetTitle>
             ) : (
-              <h2 className="text-lg font-semibold group-data-[collapsible=icon]:hidden">History</h2>
+              <h2 className="text-lg font-semibold group-data-[collapsible=icon]:hidden">Pasqua AI</h2>
             )}
           </div>
           <SidebarTrigger disabled={isLoading} />
@@ -66,6 +69,43 @@ export function ChatHistorySidebar({
       <SidebarContent className="flex-1 p-0">
         <ScrollArea className="h-full">
           <SidebarMenu className="px-2 py-2">
+            {/* Flashcards Link */}
+            <SidebarMenuItem>
+              <Link href="/flashcards" passHref legacyBehavior>
+                <SidebarMenuButton
+                  asChild
+                  isActive={typeof window !== 'undefined' && window.location.pathname === "/flashcards"}
+                  className="justify-start w-full text-left h-auto py-2 px-2 group-data-[collapsible=icon]:justify-center"
+                  tooltip="Flashcards"
+                  disabled={isLoading} // Consider if flashcard generation has its own loading state
+                >
+                  <a>
+                    <Layers className="h-4 w-4" />
+                    <span className="group-data-[collapsible=icon]:hidden">Flashcards</span>
+                  </a>
+                </SidebarMenuButton>
+              </Link>
+            </SidebarMenuItem>
+
+            {/* New Chat Button - moved up for better UX when sidebar is collapsed */}
+             <SidebarMenuItem>
+                 <SidebarMenuButton
+                    onClick={onNewChat}
+                    className="justify-start w-full text-left h-auto py-2 px-2 group-data-[collapsible=icon]:justify-center bg-primary/10 hover:bg-primary/20 text-primary"
+                    tooltip="New Chat"
+                    disabled={isLoading}
+                >
+                    <Edit3 className="h-4 w-4" />
+                    <span className="group-data-[collapsible=icon]:hidden">New Chat</span>
+                </SidebarMenuButton>
+            </SidebarMenuItem>
+
+
+            {sortedSessions.length > 0 && (
+                 <div className="my-2 px-2 text-xs font-medium text-muted-foreground group-data-[collapsible=icon]:hidden">
+                    Chat History
+                </div>
+            )}
             {sortedSessions.map((session) => (
               <SidebarMenuItem key={session.id} className="relative group/item">
                 <SidebarMenuButton
@@ -83,35 +123,30 @@ export function ChatHistorySidebar({
                     </span>
                   </div>
                 </SidebarMenuButton>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 group-hover/item:opacity-100 group-data-[collapsible=icon]:hidden"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteChat(session.id);
-                  }}
-                  aria-label="Delete chat"
-                  disabled={isLoading} 
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                {sidebarState === "expanded" && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 group-hover/item:opacity-100 group-data-[collapsible=icon]:hidden"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteChat(session.id);
+                    }}
+                    aria-label="Delete chat"
+                    disabled={isLoading} 
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
               </SidebarMenuItem>
             ))}
           </SidebarMenu>
         </ScrollArea>
       </SidebarContent>
-      <SidebarFooter className="p-2 border-t border-border">
-         <Button 
-            variant="outline" 
-            className="w-full justify-center group-data-[collapsible=icon]:justify-center"
-            onClick={onNewChat}
-            aria-label="New Chat"
-            disabled={isLoading} 
-          >
-            <Edit3 className="h-4 w-4" />
-           <span className="ml-2 group-data-[collapsible=icon]:hidden">New Chat</span>
-         </Button>
+      <SidebarFooter className="p-2 border-t border-sidebar-border group-data-[collapsible=icon]:hidden">
+        <div className="text-xs text-muted-foreground text-center">
+            Pasqua AI Chat
+        </div>
       </SidebarFooter>
     </Sidebar>
   );
