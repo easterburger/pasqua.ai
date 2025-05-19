@@ -563,14 +563,14 @@ export default function ChatPage() {
         onNewChat={() => handleNewChat(isTemporaryChat)}
         onSelectChat={handleSelectChat}
         onDeleteChat={handleDeleteChat}
-        isLoading={isLoading || isCurrentlyEditingThisTitle}
+        isLoading={isLoading || isCurrentlyEditingThisTitle || authLoading}
         className="hidden md:flex"
       />
       <SidebarInset>
         <div className="flex h-screen w-full flex-col items-center bg-background text-foreground">
           <header className="w-full flex justify-between items-center p-3 md:p-4 border-b border-border sticky top-0 bg-background z-10">
             <div className="flex items-center gap-2 flex-grow min-w-0">
-               <Button variant="ghost" size="icon" onClick={toggleSidebar} className="md:hidden shrink-0" aria-label="Toggle History" disabled={isLoading || isCurrentlyEditingThisTitle}>
+               <Button variant="ghost" size="icon" onClick={toggleSidebar} className="md:hidden shrink-0" aria-label="Toggle History" disabled={isLoading || isCurrentlyEditingThisTitle || authLoading}>
                 <PanelLeft className="h-6 w-6 text-primary" />
               </Button>
 
@@ -598,7 +598,7 @@ export default function ChatPage() {
                           }
                     }}
                     className="text-lg font-semibold h-9 px-2 flex-grow bg-card border border-input focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
-                    disabled={isLoading}
+                    disabled={isLoading || authLoading}
                   />
                 ) : (
                   <h2 className="text-lg font-semibold truncate px-1 py-1">
@@ -615,13 +615,13 @@ export default function ChatPage() {
                   checked={isTemporaryChat}
                   onCheckedChange={handleTemporaryChatToggle}
                   aria-label="Temporary Chat Toggle"
-                  disabled={isLoading || isCurrentlyEditingThisTitle}
+                  disabled={isLoading || isCurrentlyEditingThisTitle || authLoading}
                 />
                 <Label htmlFor="temporary-chat" className="text-sm hidden sm:inline">Temporary</Label>
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-9 w-9" disabled={isLoading || isCurrentlyEditingThisTitle}>
+                  <Button variant="ghost" size="icon" className="h-9 w-9" disabled={isLoading || isCurrentlyEditingThisTitle || authLoading}>
                     <MoreHorizontal className="h-5 w-5"/>
                   </Button>
                 </DropdownMenuTrigger>
@@ -629,20 +629,20 @@ export default function ChatPage() {
                   <DropdownMenuLabel>Chat Options</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {activeChatId && !isCurrentlyEditingThisTitle && activeSession && !activeSession.isTemporary && (
-                    <DropdownMenuItem onClick={() => startEditingTitle(activeChatId)} disabled={isLoading}>
+                    <DropdownMenuItem onClick={() => startEditingTitle(activeChatId)} disabled={isLoading || authLoading}>
                       <Edit3 className="mr-2 h-4 w-4" /> Rename Chat
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem onClick={() => handleNewChat(false)} disabled={isLoading || isCurrentlyEditingThisTitle}>New Persistent Chat</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleNewChat(true)} disabled={isLoading || isCurrentlyEditingThisTitle}>New Temporary Chat</DropdownMenuItem>
-                   <DropdownMenuItem onClick={handleThemeToggle} disabled={isLoading || isCurrentlyEditingThisTitle}>
+                  <DropdownMenuItem onClick={() => handleNewChat(false)} disabled={isLoading || isCurrentlyEditingThisTitle || authLoading}>New Persistent Chat</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleNewChat(true)} disabled={isLoading || isCurrentlyEditingThisTitle || authLoading}>New Temporary Chat</DropdownMenuItem>
+                   <DropdownMenuItem onClick={handleThemeToggle} disabled={isLoading || isCurrentlyEditingThisTitle || authLoading}>
                     <ThemeToggleItemContent />
                   </DropdownMenuItem>
                   {activeChatId && chatSessions.find(s => s.id === activeChatId && !s.isTemporary && s.messages.length > 0 ) && (
                      <DropdownMenuItem
                         onClick={() => activeChatId && handleDeleteChat(activeChatId)}
                         className="text-destructive"
-                        disabled={isLoading || isCurrentlyEditingThisTitle}>
+                        disabled={isLoading || isCurrentlyEditingThisTitle || authLoading}>
                        <Trash2 className="mr-2 h-4 w-4" /> Delete Current Chat
                     </DropdownMenuItem>
                   )}
@@ -653,7 +653,7 @@ export default function ChatPage() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button variant="ghost" size="icon" onClick={() => setIsApiKeyDialogOpen(true)} aria-label="API Key Settings" className="h-9 w-9" disabled={isLoading || isCurrentlyEditingThisTitle}>
+              <Button variant="ghost" size="icon" onClick={() => setIsApiKeyDialogOpen(true)} aria-label="API Key Settings" className="h-9 w-9" disabled={isLoading || isCurrentlyEditingThisTitle || authLoading}>
                 <Settings className="h-5 w-5" />
               </Button>
             </div>
@@ -672,7 +672,7 @@ export default function ChatPage() {
                         variant="outline"
                         className="h-auto p-4 text-left justify-start bg-card hover:bg-accent/50"
                         onClick={() => handleSendMessage(`${prompt.title} ${prompt.description}`)}
-                        disabled={isLoading || !apiKey || !currentUser}
+                        disabled={isLoading || !apiKey || !currentUser || authLoading}
                       >
                         <prompt.icon className="h-5 w-5 mr-3 text-primary shrink-0" />
                         <div>
@@ -701,7 +701,7 @@ export default function ChatPage() {
               <ChatInput
                 onSendMessage={handleSendMessage}
                 isLoading={isLoading}
-                disabled={isLoading || !apiKey || isCurrentlyEditingThisTitle || !currentUser}
+                disabled={isLoading || !apiKey || isCurrentlyEditingThisTitle || !currentUser || authLoading}
               />
             </div>
           </div>
@@ -716,3 +716,4 @@ export default function ChatPage() {
     </div>
   );
 }
+
