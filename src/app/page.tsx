@@ -103,8 +103,6 @@ export default function ChatPage() {
     if (sessionsToSave.length > 0) {
       localStorage.setItem(CHAT_SESSIONS_LOCAL_STORAGE_KEY, JSON.stringify(sessionsToSave));
     } else {
-      // If there are no non-temporary sessions, remove the key from localStorage
-      // This handles the case where all chats are deleted or the last one becomes temporary
       localStorage.removeItem(CHAT_SESSIONS_LOCAL_STORAGE_KEY);
     }
   }, [chatSessions]);
@@ -166,18 +164,18 @@ export default function ChatPage() {
       setEditingChatSessionId(null); 
     }
 
-    let currentActiveChatId = activeChatId;
-    let tempMessages = [...currentMessages]; 
+    let currentActiveChatIdForRequest = activeChatId;
+    let tempMessagesForRequestSetup = [...currentMessages]; 
 
     const currentActiveSessionDetails = activeChatId ? chatSessions.find(s => s.id === activeChatId) : null;
-    const currentActiveChatIsPristineTemporary = currentActiveSessionDetails?.isTemporary && currentMessages.length === 0;
+    const currentActiveChatIsPristineTemporary = currentActiveSessionDetails?.isTemporary && tempMessagesForRequestSetup.length === 0;
 
-    if (!currentActiveChatId || (isTemporaryChat && !currentActiveChatIsPristineTemporary)) {
+    if (!currentActiveChatIdForRequest || (isTemporaryChat && !currentActiveChatIsPristineTemporary)) {
         const newId = handleNewChat(false); 
-        currentActiveChatId = newId;
-        tempMessages = []; 
-    } else if (isTemporaryChat && currentActiveChatIsPristineTemporary && currentActiveChatId) {
-        setChatSessions(prev => prev.map(s => s.id === currentActiveChatId ? {...s, isTemporary: false, title: "New Chat", lastUpdatedAt: Date.now()} : s));
+        currentActiveChatIdForRequest = newId;
+        tempMessagesForRequestSetup = []; 
+    } else if (isTemporaryChat && currentActiveChatIsPristineTemporary && currentActiveChatIdForRequest) {
+        setChatSessions(prev => prev.map(s => s.id === currentActiveChatIdForRequest ? {...s, isTemporary: false, title: "New Chat", lastUpdatedAt: Date.now()} : s));
         setIsTemporaryChat(false); 
     }
 
@@ -189,7 +187,7 @@ export default function ChatPage() {
       userMessageParts.push({
         inlineData: {
           mimeType: mediaPayload.type,
-          data: mediaPayload.dataUri.split(',')[1], // Extract base64 data
+          data: mediaPayload.dataUri.split(',')[1], 
         },
       });
     }
@@ -202,9 +200,8 @@ export default function ChatPage() {
       timestamp: Date.now(),
     };
     
-    // Derive title from first message (text or media name)
     let autoTitle = "";
-    if (currentMessages.length === 0 && (!currentActiveSessionDetails || currentActiveSessionDetails.title === "New Chat")) {
+    if (tempMessagesForRequestSetup.length === 0 && (!currentActiveSessionDetails || currentActiveSessionDetails.title === "New Chat")) {
         if (messageText) {
             autoTitle = messageText.substring(0, 30) + (messageText.length > 30 ? '...' : '');
         } else if (mediaPayload) {
@@ -212,11 +209,22 @@ export default function ChatPage() {
         }
     }
     
-    tempMessages = [...tempMessages, userMessage];
-    setCurrentMessages(tempMessages); 
-
-    if (currentActiveChatId) {
-        updateChatSessionMessages(currentActiveChatId, tempMessages, autoTitle || undefined);
+    setCurrentMessages(prev => [...prev, userMessage]);
+    // Update chat session immediately with user message
+    if (currentActiveChatIdForRequest) {
+        setChatSessions(prevSessions =>
+          prevSessions.map(session =>
+            session.id === currentActiveChatIdForRequest
+              ? {
+                  ...session,
+                  messages: [...session.messages, userMessage],
+                  title: autoTitle ? autoTitle : session.title,
+                  lastUpdatedAt: Date.now(),
+                  isTemporary: (isTemporaryChat && currentActiveChatIsPristineTemporary) ? false : session.isTemporary,
+                }
+              : session
+          )
+        );
     }
     
     const aiPlaceholderMessage: ChatMessage = {
@@ -227,17 +235,14 @@ export default function ChatPage() {
         timestamp: Date.now()
     };
     
-    tempMessages = [...tempMessages, aiPlaceholderMessage];
-    setCurrentMessages(tempMessages);
-
-    if (currentActiveChatId) {
-        updateChatSessionMessages(currentActiveChatId, tempMessages, autoTitle || undefined);
+    setCurrentMessages(prev => [...prev, aiPlaceholderMessage]);
+    if (currentActiveChatIdForRequest) {
+      updateChatSessionMessages(currentActiveChatIdForRequest, [...tempMessagesForRequestSetup, userMessage, aiPlaceholderMessage], autoTitle || undefined);
     }
 
     setIsLoading(true);
 
-    const historyToSend: GeminiContent[] = tempMessages
-        .slice(0, -1) 
+    const historyToSend: GeminiContent[] = [...tempMessagesForRequestSetup, userMessage]
         .map(msg => {
             const parts: GeminiPart[] = [];
             if (typeof msg.text === 'string' && msg.text) {
@@ -256,7 +261,7 @@ export default function ChatPage() {
                 parts: parts,
             };
         })
-        .filter(content => content.parts.length > 0); // Ensure we don't send empty parts array
+        .filter(content => content.parts.length > 0); 
 
     let accumulatedResponse = "";
 
@@ -267,9 +272,60 @@ export default function ChatPage() {
         body: JSON.stringify({ contents: historyToSend }),
       });
 
-      if (!response.ok || !response.body) {
-        const errorData = await response.json().catch(() => ({ error: { message: "Unknown API error" } }));
-        throw new Error(errorData.error?.message || `API request failed with status ${response.status}`);
+      if (!response.ok) {
+        let errorResponseMessage = `API request failed with status ${response.status}`;
+        try {
+          const errorData = await response.json();
+          if (errorData && errorData.error && errorData.error.message) {
+            errorResponseMessage = errorData.error.message;
+          }
+        } catch (e) {
+          console.warn("Could not parse error JSON from API, using status code as fallback.", e);
+        }
+        
+        console.error("API Error (non-ok response):", errorResponseMessage);
+        const errorTextComponent = (
+            <div className="text-destructive">
+                <AlertTriangle className="inline-block mr-2 h-4 w-4" />
+                Error: {errorResponseMessage}
+            </div>
+        );
+        setCurrentMessages(prevMsgs => {
+            const updated = prevMsgs.map((msg, index) =>
+                index === prevMsgs.length - 1 
+                ? { ...msg, text: errorTextComponent, isStreaming: false } 
+                : msg
+            );
+            if(currentActiveChatIdForRequest) updateChatSessionMessages(currentActiveChatIdForRequest, updated.map(m => ({...m, isStreaming: false})));
+            return updated;
+        });
+        toast({ title: "API Error", description: errorResponseMessage, variant: "destructive" });
+        setIsLoading(false); // Ensure isLoading is set to false in this path
+        return; // Stop further processing
+      }
+
+      if (!response.body) {
+        // This case should ideally not happen if response.ok is true and it's a stream.
+        const noBodyErrorMsg = "API request successful, but no response body found for streaming.";
+        console.error(noBodyErrorMsg);
+        const errorTextComponent = (
+          <div className="text-destructive">
+            <AlertTriangle className="inline-block mr-2 h-4 w-4" />
+            Error: {noBodyErrorMsg}
+          </div>
+        );
+        setCurrentMessages(prevMsgs => {
+          const updated = prevMsgs.map((msg, index) =>
+            index === prevMsgs.length - 1
+            ? { ...msg, text: errorTextComponent, isStreaming: false }
+            : msg
+          );
+          if(currentActiveChatIdForRequest) updateChatSessionMessages(currentActiveChatIdForRequest, updated.map(m => ({...m, isStreaming: false})));
+          return updated;
+        });
+        toast({ title: "API Error", description: noBodyErrorMsg, variant: "destructive" });
+        setIsLoading(false);
+        return;
       }
 
       const reader = response.body.getReader();
@@ -336,11 +392,12 @@ export default function ChatPage() {
                         ? { ...msg, text: errorText, isStreaming: false }
                         : msg
                     );
-                    if(currentActiveChatId) updateChatSessionMessages(currentActiveChatId, updated.map(m => ({...m, isStreaming: false})));
+                    if(currentActiveChatIdForRequest) updateChatSessionMessages(currentActiveChatIdForRequest, updated.map(m => ({...m, isStreaming: false})));
                     return updated;
                 });
                 setIsLoading(false);
-                return;
+                reader.cancel().catch(e => console.warn("Error cancelling reader:", e)); // Cancel the reader
+                return; // Exit from handleSendMessage
               }
             } catch (e) { console.warn("Error parsing streaming JSON chunk:", e, "Line:", line); }
           }
@@ -354,14 +411,14 @@ export default function ChatPage() {
             ? { ...msg, text: finalResponse, isStreaming: false }
             : msg
         );
-        if(currentActiveChatId) updateChatSessionMessages(currentActiveChatId, updated);
+        if(currentActiveChatIdForRequest) updateChatSessionMessages(currentActiveChatIdForRequest, updated);
         return updated;
       });
 
-    } catch (error) {
-      console.error("Error calling Gemini API:", error);
+    } catch (error) { // Catches fetch errors or other unexpected JS errors
+      console.error("Error calling Gemini API (general catch):", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      const errorText = (
+      const errorTextComponent = (
           <div className="text-destructive">
             <AlertTriangle className="inline-block mr-2 h-4 w-4" />
             Error: {errorMessage}
@@ -370,19 +427,24 @@ export default function ChatPage() {
       setCurrentMessages(prevMsgs => {
         const updated = prevMsgs.map((msg, index) =>
             index === prevMsgs.length - 1
-            ? { ...msg, text: errorText, isStreaming: false }
+            ? { ...msg, text: errorTextComponent, isStreaming: false }
             : msg
         );
-        if(currentActiveChatId) updateChatSessionMessages(currentActiveChatId, updated);
+        if(currentActiveChatIdForRequest) updateChatSessionMessages(currentActiveChatIdForRequest, updated);
         return updated;
       });
       toast({ title: "API Error", description: errorMessage, variant: "destructive" });
     } finally {
       setIsLoading(false);
-      if (currentActiveChatId) {
+      if (currentActiveChatIdForRequest) {
         setCurrentMessages(prev => {
             const finalMessages = prev.map(m => ({...m, isStreaming: false}));
-            updateChatSessionMessages(currentActiveChatId, finalMessages);
+            // Ensure the session in chatSessions also has isStreaming false for all its messages
+            setChatSessions(sessions => sessions.map(s => 
+              s.id === currentActiveChatIdForRequest 
+              ? {...s, messages: finalMessages, lastUpdatedAt: Date.now()} 
+              : s
+            ));
             return finalMessages;
         });
       }
@@ -421,7 +483,7 @@ export default function ChatPage() {
     const selectedChat = chatSessions.find(session => session.id === sessionId);
     if (selectedChat) {
       setActiveChatId(sessionId);
-      setCurrentMessages(selectedChat.messages);
+      setCurrentMessages(selectedChat.messages.map(m => ({...m, isStreaming: false }))); // Ensure no stale streaming states
       setIsTemporaryChat(selectedChat.isTemporary || false);
       if (isMobile) toggleSidebar();
     }
@@ -451,17 +513,13 @@ export default function ChatPage() {
     if (activeChatId) {
         const currentActiveChat = chatSessions.find(c => c.id === activeChatId);
         if(currentActiveChat && currentActiveChat.messages.length === 0) {
-            // If current chat is empty, just toggle its temporary status
             setChatSessions(prev => prev.map(s => s.id === activeChatId ? {...s, isTemporary: checked, lastUpdatedAt: Date.now()} : s));
         } else if (checked) {
-            // If current chat has messages and user wants temporary, create a new temporary chat
             handleNewChat(true);
         } else {
-            // If user wants persistent, make current chat persistent (if it was temporary)
              setChatSessions(prev => prev.map(s => s.id === activeChatId ? {...s, isTemporary: false, lastUpdatedAt: Date.now()} : s));
         }
     } else {
-        // No active chat, create a new one with the specified temporary status
         handleNewChat(checked);
     }
   };
@@ -513,7 +571,7 @@ export default function ChatPage() {
       <ChatHistorySidebar
         chatSessions={chatSessions}
         activeChatId={activeChatId}
-        onNewChat={() => handleNewChat(isTemporaryChat)} // Pass current temp mode
+        onNewChat={() => handleNewChat(isTemporaryChat)} 
         onSelectChat={handleSelectChat}
         onDeleteChat={handleDeleteChat}
         isLoading={isLoading || isCurrentlyEditingThisTitle}
@@ -586,7 +644,7 @@ export default function ChatPage() {
                   )}
                   <DropdownMenuItem onClick={() => handleNewChat(false)} disabled={isLoading || isCurrentlyEditingThisTitle}>New Persistent Chat</DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleNewChat(true)} disabled={isLoading || isCurrentlyEditingThisTitle}>New Temporary Chat</DropdownMenuItem>
-                  {activeChatId && chatSessions.find(s => s.id === activeChatId && !s.isTemporary)?.messages.length > 0 && ( 
+                  {activeChatId && chatSessions.find(s => s.id === activeChatId && !s.isTemporary && s.messages.length > 0 ) && ( 
                      <DropdownMenuItem
                         onClick={() => activeChatId && handleDeleteChat(activeChatId)}
                         className="text-destructive"
@@ -659,3 +717,4 @@ export default function ChatPage() {
     </div>
   );
 }
+
