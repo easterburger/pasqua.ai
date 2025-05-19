@@ -12,8 +12,6 @@ import { PasquaIcon } from "@/components/icons/PasquaIcon";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 
-const USER_DOMAIN = "@pasqua.user"; // Internal domain for constructing emails
-
 export default function SignupPage() {
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -28,7 +26,6 @@ export default function SignupPage() {
     }
   }, [currentUser, router]);
 
-
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (password !== confirmPassword) {
@@ -40,8 +37,7 @@ export default function SignupPage() {
       return;
     }
     setIsSubmitting(true);
-    const emailForFirebase = username.trim() + USER_DOMAIN;
-    await signup(emailForFirebase, password);
+    await signup(username.trim(), password);
     setIsSubmitting(false);
     // Navigation is handled within the signup function on success/failure
   };
@@ -63,7 +59,13 @@ export default function SignupPage() {
             <PasquaIcon className="h-16 w-16 text-primary" />
           </div>
           <CardTitle className="text-3xl font-bold">Create an Account</CardTitle>
-          <CardDescription>Choose a username and password.</CardDescription>
+          <CardDescription>
+            Choose a username and password.
+            <br />
+            <span className="text-xs text-destructive font-semibold">
+              WARNING: This is a simulated system and is NOT secure. For demonstration only.
+            </span>
+            </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -88,7 +90,7 @@ export default function SignupPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={6} // Firebase default minimum
+                minLength={6} 
                 disabled={isSubmitting}
               />
             </div>
@@ -115,9 +117,6 @@ export default function SignupPage() {
             <Link href="/auth/login" className="font-medium text-primary hover:underline">
               Log in
             </Link>
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground text-center">
-            Usernames are unique. Password recovery via email is not available with this system. Choose a strong password and remember your username.
           </p>
         </CardFooter>
       </Card>

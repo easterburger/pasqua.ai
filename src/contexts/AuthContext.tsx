@@ -2,17 +2,20 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from 'firebase/auth';
-import { auth as firebaseAuthInstance } from '@/lib/firebase'; // Renamed import
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 
+// Define the shape of a user in our simulated system
+interface SimulatedUser {
+  username: string;
+}
+
 interface AuthContextType {
-  currentUser: User | null;
+  currentUser: SimulatedUser | null;
   loading: boolean;
-  signup: (email: string, pass: string) => Promise<User | null>;
-  login: (email: string, pass: string) => Promise<User | null>;
-  logout: () => Promise<void>;
+  signup: (username: string, pass: string) => Promise<boolean>;
+  login: (username: string, pass: string) => Promise<boolean>;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -25,92 +28,108 @@ export function useAuth() {
   return context;
 }
 
-interface AuthProviderProps {
-  children: ReactNode;
+const USERS_STORAGE_KEY = 'pasqua-simulated-users';
+const CURRENT_USER_SESSION_KEY = 'pasqua-current-simulated-user';
+
+interface StoredUsers {
+  [username: string]: string; // username: password_plaintext
 }
 
-export function AuthProvider({ children }: AuthProviderProps) {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [currentUser, setCurrentUser] = useState<SimulatedUser | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!firebaseAuthInstance) {
-      setLoading(false);
-      console.error("Firebase Auth instance is not available. Cannot set up auth state listener.");
-      // Potentially set an error state here to inform the user in the UI if auth is critical
-      return;
+    // Check for an active session on initial load
+    try {
+      const storedUserSession = localStorage.getItem(CURRENT_USER_SESSION_KEY);
+      if (storedUserSession) {
+        const user: SimulatedUser = JSON.parse(storedUserSession);
+        // Basic validation: check if this user still "exists" in our users list
+        const users = JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || '{}') as StoredUsers;
+        if (users[user.username]) {
+          setCurrentUser(user);
+        } else {
+          // User from session doesn't exist anymore, clear session
+          localStorage.removeItem(CURRENT_USER_SESSION_KEY);
+        }
+      }
+    } catch (error) {
+      console.error("Error loading user session from localStorage:", error);
+      localStorage.removeItem(CURRENT_USER_SESSION_KEY);
     }
-    const unsubscribe = onAuthStateChanged(firebaseAuthInstance, (user) => {
-      setCurrentUser(user);
-      setLoading(false);
-    });
-    return unsubscribe; // Unsubscribe on cleanup
+    setLoading(false);
   }, []);
 
-  const signup = async (email: string, pass: string): Promise<User | null> => {
-    if (!firebaseAuthInstance) {
-      toast({ title: "Authentication Error", description: "Firebase Auth service is not available.", variant: "destructive" });
-      setLoading(false); // Ensure loading state is managed
-      return null;
-    }
-    setLoading(true);
+  const getUsersFromStorage = (): StoredUsers => {
     try {
-      const userCredential = await createUserWithEmailAndPassword(firebaseAuthInstance, email, pass);
-      setCurrentUser(userCredential.user);
-      toast({ title: "Account Created", description: "Successfully signed up!" });
-      router.push('/'); // Redirect to home after signup
-      return userCredential.user;
-    } catch (error: any) {
-      console.error("Signup error:", error);
-      toast({ title: "Signup Failed", description: error.message || "Could not create account.", variant: "destructive" });
-      return null;
-    } finally {
-      setLoading(false);
+      return JSON.parse(localStorage.getItem(USERS_STORAGE_KEY) || '{}') as StoredUsers;
+    } catch (e) {
+      console.error("Error parsing users from localStorage:", e);
+      return {};
     }
   };
 
-  const login = async (email: string, pass: string): Promise<User | null> => {
-    if (!firebaseAuthInstance) {
-      toast({ title: "Authentication Error", description: "Firebase Auth service is not available.", variant: "destructive" });
-      setLoading(false); // Ensure loading state is managed
-      return null;
-    }
-    setLoading(true);
+  const saveUsersToStorage = (users: StoredUsers) => {
     try {
-      const userCredential = await signInWithEmailAndPassword(firebaseAuthInstance, email, pass);
-      setCurrentUser(userCredential.user);
+      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+    } catch (e) {
+      console.error("Error saving users to localStorage:", e);
+    }
+  };
+
+  const signup = async (username: string, pass: string): Promise<boolean> => {
+    setLoading(true);
+    if (!username.trim() || !pass) {
+        toast({ title: "Signup Failed", description: "Username and password cannot be empty.", variant: "destructive" });
+        setLoading(false);
+        return false;
+    }
+    const users = getUsersFromStorage();
+    if (users[username]) {
+      toast({ title: "Signup Failed", description: "Username already exists.", variant: "destructive" });
+      setLoading(false);
+      return false;
+    }
+
+    // INSECURE: Storing password in plaintext (or any client-side form) is not safe for real apps.
+    users[username] = pass; 
+    saveUsersToStorage(users);
+
+    const newUser: SimulatedUser = { username };
+    setCurrentUser(newUser);
+    localStorage.setItem(CURRENT_USER_SESSION_KEY, JSON.stringify(newUser));
+    toast({ title: "Account Created", description: "Successfully signed up!" });
+    router.push('/');
+    setLoading(false);
+    return true;
+  };
+
+  const login = async (username: string, pass: string): Promise<boolean> => {
+    setLoading(true);
+    const users = getUsersFromStorage();
+    if (users[username] && users[username] === pass) {
+      const userToLogin: SimulatedUser = { username };
+      setCurrentUser(userToLogin);
+      localStorage.setItem(CURRENT_USER_SESSION_KEY, JSON.stringify(userToLogin));
       toast({ title: "Login Successful", description: "Welcome back!" });
-      router.push('/'); // Redirect to home after login
-      return userCredential.user;
-    } catch (error: any) {
-      console.error("Login error:", error);
-      toast({ title: "Login Failed", description: error.message || "Invalid credentials.", variant: "destructive" });
-      return null;
-    } finally {
+      router.push('/');
       setLoading(false);
+      return true;
+    } else {
+      toast({ title: "Login Failed", description: "Invalid username or password.", variant: "destructive" });
+      setLoading(false);
+      return false;
     }
   };
 
-  const logout = async () => {
-    if (!firebaseAuthInstance) {
-      toast({ title: "Authentication Error", description: "Firebase Auth service is not available.", variant: "destructive" });
-      setLoading(false); // Ensure loading state is managed
-      return;
-    }
-    setLoading(true);
-    try {
-      await firebaseSignOut(firebaseAuthInstance);
-      setCurrentUser(null);
-      toast({ title: "Logged Out", description: "You have been successfully logged out." });
-      router.push('/auth/login'); // Redirect to login after logout
-    } catch (error: any) {
-      console.error("Logout error:", error);
-      toast({ title: "Logout Failed", description: error.message || "Could not log out.", variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
+  const logout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem(CURRENT_USER_SESSION_KEY);
+    toast({ title: "Logged Out", description: "You have been successfully logged out." });
+    router.push('/auth/login');
   };
 
   const value = {

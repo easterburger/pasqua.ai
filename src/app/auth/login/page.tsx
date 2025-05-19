@@ -12,8 +12,6 @@ import { PasquaIcon } from "@/components/icons/PasquaIcon";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 
-const USER_DOMAIN = "@pasqua.user"; // Internal domain for constructing emails
-
 export default function LoginPage() {
   const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
@@ -34,8 +32,7 @@ export default function LoginPage() {
       return;
     }
     setIsSubmitting(true);
-    const emailForFirebase = username.trim() + USER_DOMAIN;
-    await login(emailForFirebase, password);
+    await login(username.trim(), password);
     setIsSubmitting(false);
     // Navigation is handled within the login function on success/failure
   };
@@ -49,7 +46,6 @@ export default function LoginPage() {
   }
   if(currentUser) return null; // Avoid rendering form if user object becomes available during render
 
-
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-background p-4">
       <Card className="w-full max-w-md shadow-xl">
@@ -58,7 +54,13 @@ export default function LoginPage() {
             <PasquaIcon className="h-16 w-16 text-primary" />
           </div>
           <CardTitle className="text-3xl font-bold">Welcome Back!</CardTitle>
-          <CardDescription>Sign in with your username and password.</CardDescription>
+          <CardDescription>
+            Sign in with your username and password.
+            <br />
+            <span className="text-xs text-destructive font-semibold">
+              WARNING: This is a simulated login and is NOT secure. For demonstration only.
+            </span>
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -97,9 +99,6 @@ export default function LoginPage() {
             <Link href="/auth/signup" className="font-medium text-primary hover:underline">
               Sign up
             </Link>
-          </p>
-           <p className="mt-2 text-xs text-muted-foreground text-center">
-            Usernames are unique. Password recovery via email is not available with this system.
           </p>
         </CardFooter>
       </Card>
