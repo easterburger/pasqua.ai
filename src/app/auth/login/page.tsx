@@ -12,8 +12,10 @@ import { PasquaIcon } from "@/components/icons/PasquaIcon";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 
+const USER_DOMAIN = "@pasqua.user"; // Internal domain for constructing emails
+
 export default function LoginPage() {
-  const [email, setEmail] = React.useState("");
+  const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
   const { login, loading: authLoading, currentUser } = useAuth();
   const router = useRouter();
@@ -27,13 +29,13 @@ export default function LoginPage() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!email || !password) {
-      // Basic validation, can be enhanced
-      alert("Please enter both email and password.");
+    if (!username || !password) {
+      alert("Please enter both username and password.");
       return;
     }
     setIsSubmitting(true);
-    await login(email, password);
+    const emailForFirebase = username.trim() + USER_DOMAIN;
+    await login(emailForFirebase, password);
     setIsSubmitting(false);
     // Navigation is handled within the login function on success/failure
   };
@@ -56,18 +58,18 @@ export default function LoginPage() {
             <PasquaIcon className="h-16 w-16 text-primary" />
           </div>
           <CardTitle className="text-3xl font-bold">Welcome Back!</CardTitle>
-          <CardDescription>Sign in to continue to Pasqua AI Chat.</CardDescription>
+          <CardDescription>Sign in with your username and password.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="username">Username</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="username"
+                type="text"
+                placeholder="your_username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 required
                 disabled={isSubmitting}
               />
@@ -95,6 +97,9 @@ export default function LoginPage() {
             <Link href="/auth/signup" className="font-medium text-primary hover:underline">
               Sign up
             </Link>
+          </p>
+           <p className="mt-2 text-xs text-muted-foreground text-center">
+            Usernames are unique. Password recovery via email is not available with this system.
           </p>
         </CardFooter>
       </Card>

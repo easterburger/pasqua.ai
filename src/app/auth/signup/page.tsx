@@ -12,8 +12,10 @@ import { PasquaIcon } from "@/components/icons/PasquaIcon";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 
+const USER_DOMAIN = "@pasqua.user"; // Internal domain for constructing emails
+
 export default function SignupPage() {
-  const [email, setEmail] = React.useState("");
+  const [username, setUsername] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
   const { signup, loading: authLoading, currentUser } = useAuth();
@@ -30,15 +32,16 @@ export default function SignupPage() {
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (password !== confirmPassword) {
-      alert("Passwords do not match."); // Basic validation
+      alert("Passwords do not match.");
       return;
     }
-    if (!email || !password) {
+    if (!username || !password) {
       alert("Please fill in all fields.");
       return;
     }
     setIsSubmitting(true);
-    await signup(email, password);
+    const emailForFirebase = username.trim() + USER_DOMAIN;
+    await signup(emailForFirebase, password);
     setIsSubmitting(false);
     // Navigation is handled within the signup function on success/failure
   };
@@ -60,18 +63,18 @@ export default function SignupPage() {
             <PasquaIcon className="h-16 w-16 text-primary" />
           </div>
           <CardTitle className="text-3xl font-bold">Create an Account</CardTitle>
-          <CardDescription>Get started with Pasqua AI Chat.</CardDescription>
+          <CardDescription>Choose a username and password.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="username">Username</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="username"
+                type="text"
+                placeholder="choose_a_username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 required
                 disabled={isSubmitting}
               />
@@ -112,6 +115,9 @@ export default function SignupPage() {
             <Link href="/auth/login" className="font-medium text-primary hover:underline">
               Log in
             </Link>
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground text-center">
+            Usernames are unique. Password recovery via email is not available with this system. Choose a strong password and remember your username.
           </p>
         </CardFooter>
       </Card>
