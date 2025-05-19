@@ -61,10 +61,6 @@ export default function SignupPage() {
           <CardTitle className="text-3xl font-bold">Create an Account</CardTitle>
           <CardDescription>
             Choose a username and password.
-            <br />
-            <span className="text-xs text-destructive font-semibold">
-              WARNING: This is a simulated system and is NOT secure. For demonstration only.
-            </span>
             </CardDescription>
         </CardHeader>
         <CardContent>
