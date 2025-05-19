@@ -12,7 +12,9 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarTrigger,
+  useSidebar, // Import useSidebar
 } from "@/components/ui/sidebar";
+import { SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { PasquaIcon } from "@/components/icons/PasquaIcon";
 import { Edit3, MessageSquare, Trash2 } from "lucide-react";
@@ -36,6 +38,8 @@ export function ChatHistorySidebar({
   onDeleteChat,
   className,
 }: ChatHistorySidebarProps) {
+  const { isMobile } = useSidebar(); // Get isMobile state
+
   const sortedSessions = React.useMemo(() => {
     return [...chatSessions]
       .filter(session => !session.isTemporary) // Only show non-temporary chats in history
@@ -48,7 +52,11 @@ export function ChatHistorySidebar({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <PasquaIcon className="h-7 w-7 text-primary" />
-            <h2 className="text-lg font-semibold group-data-[collapsible=icon]:hidden">History</h2>
+            {isMobile ? (
+              <SheetTitle className="text-lg font-semibold group-data-[collapsible=icon]:hidden">History</SheetTitle>
+            ) : (
+              <h2 className="text-lg font-semibold group-data-[collapsible=icon]:hidden">History</h2>
+            )}
           </div>
           <SidebarTrigger className="group-data-[collapsible=icon]:hidden" />
         </div>
