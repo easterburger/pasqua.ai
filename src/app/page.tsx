@@ -165,7 +165,7 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-screen flex-col items-center bg-background text-foreground p-4 md:p-6">
-      <header className="w-full max-w-3xl flex justify-between items-center mb-4 md:mb-6">
+      <header className="w-full max-w-4xl flex justify-between items-center mb-4 md:mb-6">
         <div className="flex items-center gap-2">
           <PasquaIcon className="h-8 w-8 text-primary" />
           <h1 className="text-2xl font-semibold">Pasqua AI Chat</h1>
@@ -175,7 +175,7 @@ export default function ChatPage() {
         </Button>
       </header>
 
-      <div className="flex-1 w-full max-w-3xl overflow-hidden flex flex-col rounded-lg border border-border shadow-lg bg-card">
+      <div className="flex-1 w-full max-w-4xl overflow-hidden flex flex-col rounded-lg border border-border shadow-lg bg-card">
         <ScrollArea className="flex-1 p-4 md:p-6" ref={scrollAreaRef}>
           {messages.length === 0 && !isLoading && (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
@@ -192,13 +192,13 @@ export default function ChatPage() {
              <ChatMessage id="loading" sender="ai" text="Thinking..." isStreaming={true} />
           )}
         </ScrollArea>
-        <div className="p-3 md:p-4 border-t border-border">
+        <div className="p-3 md:p-4 border-t border-border bg-card"> {/* Ensure input area bg matches chat area bg */}
           <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} disabled={!apiKey} />
         </div>
       </div>
       
       {!apiKey && (
-        <Alert variant="destructive" className="w-full max-w-3xl mt-4">
+        <Alert variant="destructive" className="w-full max-w-4xl mt-4">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>API Key Required</AlertTitle>
           <AlertDescription>

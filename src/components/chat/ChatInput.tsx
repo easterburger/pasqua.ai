@@ -27,7 +27,7 @@ export function ChatInput({ onSendMessage, isLoading, disabled = false }: ChatIn
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex w-full items-center space-x-2 rounded-lg border border-border bg-card p-2 shadow-sm"
+      className="flex w-full items-center space-x-2 rounded-lg border-0 bg-transparent p-1 shadow-none" // Adjusted for a flatter look within its container
     >
       <Input
         ref={inputRef}
@@ -35,11 +35,11 @@ export function ChatInput({ onSendMessage, isLoading, disabled = false }: ChatIn
         placeholder={disabled ? "Set API Key to chat" : "Type your message..."}
         value={message}
         onChange={(e) => setMessage(e.target.value)}
-        className="flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
+        className="flex-1 border border-input bg-background focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-0 shadow-sm rounded-md px-4 py-2 h-11" // More explicit styling for the input field itself
         disabled={isLoading || disabled}
         aria-label="Chat message input"
       />
-      <Button type="submit" size="icon" disabled={isLoading || disabled || !message.trim()} aria-label="Send message">
+      <Button type="submit" size="icon" className="h-11 w-11" disabled={isLoading || disabled || !message.trim()} aria-label="Send message">
         <SendHorizonal className="h-5 w-5" />
       </Button>
     </form>
