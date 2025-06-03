@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Study Guide Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="page-header">
+            <h1>Study Guide Generator</h1>
+            <nav>
+                <a href="{{ url_for('index') }}">Chat</a>
+                <a href="{{ url_for('flashcards_page') }}">Flashcards</a>
+                <a href="{{ url_for('quiz_generator_page') }}">Quiz Generator</a>
+                <a href="{{ url_for('study_guide_generator_page') }}">Study Guide</a>
+            </nav>
+        </header>
+
+        <form id="studyGuideForm" class="tool-form">
+            <div class="form-group">
+                <label for="guideSourceText">Source Text or Detailed Topic:</label>
+                <textarea id="guideSourceText" name="guideSourceText" rows="10" required placeholder="Enter text to base the study guide on, or a very detailed topic..."></textarea>
+            </div>
+            <!-- Future: Add options for length, sections, format etc. -->
+            <button type="submit" id="generateGuideButton">Generate Study Guide</button>
+        </form>
+
+        <div id="loadingIndicatorGuide" style="display: none;">
+            <p>Generating study guide, please wait...</p>
+            <div class="spinner"></div>
+        </div>
+
+        <div id="errorDisplayGuide" class="error-message" style="display: none;"></div>
+
+        <div id="studyGuideResults" class="results-area rich-content">
+            <!-- Study guide content will be displayed here (potentially Markdown rendered as HTML) -->
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='js/study_guide_generator.js') }}"></script>
+</body>
+</html>

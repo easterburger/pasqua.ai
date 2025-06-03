@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flashcard Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="page-header">
+            <h1>Flashcard Generator</h1>
+            <nav>
+                <a href="{{ url_for('index') }}">Chat</a>
+                <a href="{{ url_for('flashcards_page') }}">Flashcards</a>
+                <a href="{{ url_for('quiz_generator_page') }}">Quiz Generator</a>
+                <a href="{{ url_for('study_guide_generator_page') }}">Study Guide</a>
+            </nav>
+        </header>
+
+        <form id="flashcardForm" class="tool-form">
+            <div class="form-group">
+                <label for="topic">Topic:</label>
+                <input type="text" id="topic" name="topic" required placeholder="e.g., Photosynthesis">
+            </div>
+            <div class="form-group">
+                <label for="numFlashcards">Number of Flashcards (1-10):</label>
+                <input type="number" id="numFlashcards" name="numFlashcards" value="5" min="1" max="10" required>
+            </div>
+            <div class="form-group">
+                <label for="pdfFile">Upload PDF (Optional):</label>
+                <input type="file" id="pdfFile" name="pdfFile" accept=".pdf">
+                <small id="pdfFileName"></small>
+            </div>
+            <button type="submit" id="generateButton">Generate Flashcards</button>
+        </form>
+
+        <div id="loadingIndicator" style="display: none;">
+            <p>Generating flashcards, please wait...</p>
+            <div class="spinner"></div>
+        </div>
+
+        <div id="errorDisplay" class="error-message" style="display: none;"></div>
+
+        <div id="flashcardResults" class="results-area">
+            <!-- Flashcards will be displayed here -->
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='js/flashcards.js') }}"></script>
+</body>
+</html>

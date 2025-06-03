@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header class="page-header">
+            <h1>Quiz Generator</h1>
+            <nav>
+                <a href="{{ url_for('index') }}">Chat</a>
+                <a href="{{ url_for('flashcards_page') }}">Flashcards</a>
+                <a href="{{ url_for('quiz_generator_page') }}">Quiz Generator</a>
+                <a href="{{ url_for('study_guide_generator_page') }}">Study Guide</a>
+            </nav>
+        </header>
+
+        <form id="quizForm" class="tool-form">
+            <div class="form-group">
+                <label for="sourceText">Source Text or Topic:</label>
+                <textarea id="sourceText" name="sourceText" rows="8" required placeholder="Enter text to base the quiz on, or a detailed topic..."></textarea>
+            </div>
+            <div class="form-group">
+                <label for="numQuestions">Number of Questions (1-15):</label>
+                <input type="number" id="numQuestions" name="numQuestions" value="5" min="1" max="15" required>
+            </div>
+            <!-- Future: Add question type selection if desired -->
+            <button type="submit" id="generateQuizButton">Generate Quiz</button>
+        </form>
+
+        <div id="loadingIndicatorQuiz" style="display: none;">
+            <p>Generating quiz, please wait...</p>
+            <div class="spinner"></div>
+        </div>
+
+        <div id="errorDisplayQuiz" class="error-message" style="display: none;"></div>
+
+        <div id="quizResults" class="results-area">
+            <!-- Quiz questions will be displayed here -->
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='js/quiz_generator.js') }}"></script>
+</body>
+</html>

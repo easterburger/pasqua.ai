@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Passthrough AI Chat (Python)</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div id="chatApp">
+        <header>
+            <h1>AI Chat</h1>
+            <nav>
+                <a href="{{ url_for('index') }}">Chat</a>
+                <a href="{{ url_for('flashcards_page') }}">Flashcards</a>
+                <a href="{{ url_for('quiz_generator_page') }}">Quiz Generator</a>
+                <a href="{{ url_for('study_guide_generator_page') }}">Study Guide</a>
+            </nav>
+        </header>
+        <div id="chatbox">
+            <!-- Messages will appear here -->
+            <div class="message ai-message"><p>Hello! How can I help you today?</p></div>
+        </div>
+        <div id="inputArea">
+            <input type="text" id="chatInput" placeholder="Type your message...">
+            <button id="sendButton">Send</button>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
