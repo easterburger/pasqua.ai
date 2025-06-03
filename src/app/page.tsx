@@ -36,7 +36,6 @@ const examplePrompts = [
   { title: "Brainstorm ideas", description: "for my new indie game", icon: Lightbulb },
   { title: "Explain a complex topic", description: "like quantum computing in simple terms", icon: Zap },
   { title: "Write a poem", description: "about the beauty of nature", icon: Edit3 },
-  { title: "Summarize an article", description: "from a URL (Note: URL fetching not currently implemented)", icon: Telescope },
 ];
 
 

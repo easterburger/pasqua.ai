@@ -32,7 +32,7 @@ const USERS_STORAGE_KEY = 'pasqua-simulated-users';
 const CURRENT_USER_SESSION_KEY = 'pasqua-current-simulated-user';
 
 interface StoredUsers {
-  [username: string]: string; // username: password_plaintext
+  [username: string]: true; // username: true (signifies existence)
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -94,8 +94,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
-    // INSECURE: Storing password in plaintext (or any client-side form) is not safe for real apps.
-    users[username] = pass; 
+    // SIMULATED AUTH: This is a simplified auth system for demonstration.
+    // Passwords are not stored; only username existence is checked. Not for production use.
+    users[username] = true;
     saveUsersToStorage(users);
 
     const newUser: SimulatedUser = { username };
@@ -110,7 +111,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (username: string, pass: string): Promise<boolean> => {
     setLoading(true);
     const users = getUsersFromStorage();
-    if (users[username] && users[username] === pass) {
+    // Password check removed, only check for username existence.
+    // The 'pass' parameter is kept for UI compatibility but not used for validation here.
+    if (users[username]) {
       const userToLogin: SimulatedUser = { username };
       setCurrentUser(userToLogin);
       localStorage.setItem(CURRENT_USER_SESSION_KEY, JSON.stringify(userToLogin));

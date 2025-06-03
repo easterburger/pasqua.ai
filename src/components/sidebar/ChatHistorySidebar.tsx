@@ -183,7 +183,7 @@ export function ChatHistorySidebar({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-0 group-hover/item:opacity-100 group-data-[collapsible=icon]:hidden"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 opacity-50 hover:opacity-100 group-data-[collapsible=icon]:hidden"
                     onClick={(e) => {
                       e.stopPropagation();
                       onDeleteChat(session.id);
